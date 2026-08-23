@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   无障碍全局样式
+   - 大字号模式：切换 html.a11y-large-text 放大全局字号
+   - 高对比度模式：切换 html.a11y-high-contrast 提高对比度
+   ============================================================ */
+
+:root {
+  /* 语义化颜色 CSS 变量（供高对比度模式覆盖） */
+  --a11y-bg: #f5f7fa; /* 大厂浅灰蓝底 */
+  --a11y-surface: #ffffff;
+  --a11y-text: #1f2937;
+  --a11y-muted: #4b5563;
+  --a11y-border: #d1d5db;
+  --a11y-primary: #0958d9; /* 阿里蓝按钮 */
+  --a11y-focus: #1677ff;
+}
+
+html {
+  font-size: 16px;
+}
+
+/* --- 大字号模式：全局字号放大至 20px 基准 --- */
+html.a11y-large-text {
+  font-size: 20px;
+}
+html.a11y-large-text * {
+  line-height: 1.6;
+}
+
+/* --- 高对比度模式 --- */
+html.a11y-high-contrast {
+  --a11y-bg: #000000;
+  --a11y-surface: #000000;
+  --a11y-text: #ffffff;
+  --a11y-muted: #f3f4f6;
+  --a11y-border: #ffffff;
+  --a11y-primary: #00d5c8;
+  --a11y-focus: #ffd60a;
+}
+html.a11y-high-contrast body {
+  background-color: #000000;
+  color: #ffffff;
+}
+
+/* 尊重系统「减少动态效果」偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+body {
+  background-color: var(--a11y-bg);
+  color: var(--a11y-text);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  /* 统一聚焦环样式：键盘导航可见 */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white;
+  }
+  html.a11y-high-contrast .focus-ring {
+    @apply focus-visible:ring-yellow-400 focus-visible:ring-4 focus-visible:ring-offset-0;
+  }
+
+  .card-surface {
+    @apply bg-white border border-gray-200 rounded-2xl shadow-card;
+  }
+  html.a11y-high-contrast .card-surface {
+    @apply bg-black border-2 border-white shadow-none;
+  }
+}
