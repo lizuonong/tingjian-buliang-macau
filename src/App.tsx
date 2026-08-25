@@ -1,9 +1,8 @@
-import { Accessibility, Eye, MessageSquareText, Siren, SlidersHorizontal } from 'lucide-react';
+import { Accessibility, Eye, MessageSquareText, Siren } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import A11yModeToggle from './components/A11yModeToggle';
 import { useA11y } from './context/A11yContext';
 import type { PageId } from './types';
-import AccessibilitySetup from './pages/AccessibilitySetup';
 import SpotDetail from './pages/SpotDetail';
 import AIVisionGuide from './pages/AIVisionGuide';
 import HearingAssistant from './pages/HearingAssistant';
@@ -13,7 +12,7 @@ import EmergencySOS from './pages/EmergencySOS';
  * App 主入口
  * - 顶部工具条：品牌 + 无障碍模式切换（大字号 / 高对比度）
  * - 跳过导航链接（Screen Reader 友好）
- * - 底部导航：5 个页面（导航项 44px+ 触控区，当前页 aria-current）
+ * - 底部导航：4 个页面（导航项 44px+ 触控区，当前页 aria-current）
  */
 
 interface NavItem {
@@ -23,7 +22,6 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'setup', label: '需求定制', icon: SlidersHorizontal },
   { id: 'spot', label: '景点详情', icon: Accessibility },
   { id: 'vision', label: 'AI 导览', icon: Eye },
   { id: 'hearing', label: '沟通助手', icon: MessageSquareText },
@@ -35,8 +33,6 @@ export default function App() {
 
   const renderPage = () => {
     switch (currentPage) {
-      case 'setup':
-        return <AccessibilitySetup />;
       case 'spot':
         return <SpotDetail />;
       case 'vision':
@@ -46,7 +42,7 @@ export default function App() {
       case 'sos':
         return <EmergencySOS />;
       default:
-        return <AccessibilitySetup />;
+        return <SpotDetail />;
     }
   };
 

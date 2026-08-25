@@ -16,19 +16,18 @@ npm run build   # 类型检查 + 生产构建
 
 | 模块 | 文件 | 核心功能 |
 | --- | --- | --- |
-| 01 需求定制页 | `src/pages/AccessibilitySetup.tsx` | 行动/视觉/听觉障碍、长者模式多选卡片（勾选图标 + 加粗边框 + 背景色三重选中信号） |
 | 04 景点详情页 | `src/pages/SpotDetail.tsx` | 无障碍设施卡片（入口/升降梯/卫生间/车位）+ 状态标签；众包突发障碍实时提醒（可刷新） |
 | 05 AI 视觉导览 | `src/pages/AIVisionGuide.tsx` | 语音控制条（播放/暂停、逐句朗读 ≥64px 大按钮，Web Speech API 真实朗读）；播报文本框实时高亮当前句 |
 | 06 听障沟通助手 | `src/pages/HearingAssistant.tsx` | 拍照识别（菜单/路牌模拟）+ 3D 翻转卡片 + 一键全屏大字展示；打字沟通大字出示 |
-| 07 一键 SOS | `src/pages/EmergencySOS.tsx` | 长按 3 秒触发（环形倒计时动画 + 防误触取消 + 5s 撤销确认）；道路受阻/身体不适/设备损坏快速求助卡 |
+| 07 一键 SOS | `src/pages/EmergencySOS.tsx` | 长按 3 秒触发（环形倒计时动画 + 防误触取消 + 发送前确定弹窗）；道路受阻/身体不适/设备损坏快速求助卡 |
 
 ## 可复用组件（`src/components`）
 
 - `IconButton` — 最小 44×44 Hit Target 图标按钮（支持尺寸/变体/ref 转发）
-- `A11yCard` — 多选需求卡片（`role="checkbox"` + `aria-checked`）
 - `StatusBadge` — 状态标签（图标 + 文字，不依赖颜色传达）
 - `FacilityCard` — 设施卡片
 - `SOSButton` — 长按 3 秒触发（pointer/keyboard 双通道 + rAF 进度环）
+- `ConfirmDialog` — 发送前二次确认弹窗（`role="alertdialog"` + 焦点管理 + Esc 关闭）
 - `VoiceControlBar` / `BroadcastTextBox` — 语音控制与高亮播报
 - `FlipCard` — 翻转/全屏大字模态（Esc 关闭 + 焦点管理）
 - `PageHeader` / `A11yModeToggle` — 页头与无障碍模式切换

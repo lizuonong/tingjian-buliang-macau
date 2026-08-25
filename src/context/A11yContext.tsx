@@ -7,14 +7,13 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { A11yNeed, PageId } from '../types';
+import type { PageId } from '../types';
 
 /**
  * 无障碍上下文
  * 管理：
  *  1. 无障碍模式（大字号 / 高对比度）—— 通过 html 根元素 class 驱动全局 CSS 变量
- *  2. 用户已选择的需求类别
- *  3. 当前页面
+ *  2. 当前页面
  */
 
 interface A11yContextValue {
@@ -23,10 +22,6 @@ interface A11yContextValue {
   highContrast: boolean;
   toggleLargeText: () => void;
   toggleHighContrast: () => void;
-  /* 需求定制 */
-  selectedNeeds: A11yNeed[];
-  toggleNeed: (need: A11yNeed) => void;
-  clearNeeds: () => void;
   /* 页面导航 */
   currentPage: PageId;
   navigate: (page: PageId) => void;
@@ -37,8 +32,7 @@ const A11yContext = createContext<A11yContextValue | null>(null);
 export function A11yProvider({ children }: { children: ReactNode }) {
   const [largeText, setLargeText] = useState(false);
   const [highContrast, setHighContrast] = useState(false);
-  const [selectedNeeds, setSelectedNeeds] = useState<A11yNeed[]>([]);
-  const [currentPage, setCurrentPage] = useState<PageId>('setup');
+  const [currentPage, setCurrentPage] = useState<PageId>('spot');
 
   /** 同步无障碍模式到 <html> 根元素，供全局 CSS 变量生效 */
   useEffect(() => {
@@ -54,14 +48,6 @@ export function A11yProvider({ children }: { children: ReactNode }) {
   const toggleLargeText = useCallback(() => setLargeText((v) => !v), []);
   const toggleHighContrast = useCallback(() => setHighContrast((v) => !v), []);
 
-  /** 多选需求：选中则移除，未选中则加入 */
-  const toggleNeed = useCallback((need: A11yNeed) => {
-    setSelectedNeeds((prev) =>
-      prev.includes(need) ? prev.filter((n) => n !== need) : [...prev, need],
-    );
-  }, []);
-
-  const clearNeeds = useCallback(() => setSelectedNeeds([]), []);
   const navigate = useCallback((page: PageId) => {
     setCurrentPage(page);
     // 无障碍切换页面时立即播报，帮助屏幕阅读器用户感知
@@ -74,9 +60,6 @@ export function A11yProvider({ children }: { children: ReactNode }) {
       highContrast,
       toggleLargeText,
       toggleHighContrast,
-      selectedNeeds,
-      toggleNeed,
-      clearNeeds,
       currentPage,
       navigate,
     }),
@@ -85,9 +68,6 @@ export function A11yProvider({ children }: { children: ReactNode }) {
       highContrast,
       toggleLargeText,
       toggleHighContrast,
-      selectedNeeds,
-      toggleNeed,
-      clearNeeds,
       currentPage,
       navigate,
     ],

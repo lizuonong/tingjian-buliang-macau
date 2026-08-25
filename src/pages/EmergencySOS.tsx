@@ -2,6 +2,7 @@ import { BatteryLow, HeartPulse, ShieldAlert, TrafficCone } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import SOSButton from '../components/SOSButton';
+import ConfirmDialog from '../components/ConfirmDialog';
 import PageHeader from '../components/PageHeader';
 import type { SOSCategory, SOSQuickItem } from '../types';
 
@@ -43,6 +44,8 @@ const QUICK_ICONS: Record<SOSCategory, ReactNode> = {
 
 export default function EmergencySOS() {
   const [sentCategory, setSentCategory] = useState<SOSCategory | null>(null);
+  /** 待确认的紧急求助类别（非空时弹出确认弹窗） */
+  const [pendingConfirm, setPendingConfirm] = useState<SOSCategory | null>(null);
 
   /** 发送快速求助（模拟） */
   const sendQuickHelp = (cat: SOSCategory) => {
@@ -55,7 +58,7 @@ export default function EmergencySOS() {
       <PageHeader
         icon={<ShieldAlert className="h-6 w-6" />}
         title="一键 SOS"
-        subtitle="紧急时使用。长按 3 秒触发，期间松手即可取消，防止误触。"
+        subtitle="紧急时使用。长按 3 秒触发，期间松手即可取消，触发后需在弹窗中确认发送，防止误触。"
       />
 
       {/* 长按触发按钮 */}
@@ -63,9 +66,9 @@ export default function EmergencySOS() {
         aria-label="长按紧急求助"
         className="card-surface flex flex-col items-center gap-4 p-6 sm:p-8"
       >
-        <SOSButton onTrigger={() => setSentCategory('emergency')} />
+        <SOSButton onTrigger={() => setPendingConfirm('emergency')} />
         <p className="max-w-md text-center text-sm leading-relaxed text-gray-600">
-          「{sentCategory === 'emergency' ? '已向景区应急中心发送定位与求助' : '按住按钮 3 秒触发'}」
+          「{sentCategory === 'emergency' ? '已向景区应急中心发送定位与求助' : '长按按钮 3 秒触发，随后需确认发送'}」
         </p>
       </section>
 
@@ -86,7 +89,11 @@ export default function EmergencySOS() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => sendQuickHelp(item.id)}
+                onClick={() =>
+                  item.id === 'emergency'
+                    ? setPendingConfirm('emergency')
+                    : sendQuickHelp(item.id)
+                }
                 className={`focus-ring flex min-h-[96px] flex-col items-start gap-2 rounded-2xl border-2 p-4 text-left transition-all ${
                   sent
                     ? 'border-alert-600 bg-red-50'
@@ -129,11 +136,25 @@ export default function EmergencySOS() {
       >
         <h3 className="text-base font-bold text-brand-900">使用提示</h3>
         <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-brand-900">
-          <li>按住红色按钮满 3 秒即发出求助，中途松手立即取消。</li>
-          <li>触发后 5 秒内可点击「撤销求助」，进一步防误触。</li>
+          <li>按住红色按钮满 3 秒即触发，中途松手立即取消。</li>
+          <li>触发后会弹出确认弹窗，需点击「确定发送」才会真正发出求助，进一步防误触。</li>
           <li>发送的内容包含您的实时定位与所选障碍类型。</li>
         </ul>
       </section>
+
+      {/* 发送前二次确认弹窗 */}
+      <ConfirmDialog
+        open={pendingConfirm !== null}
+        title="确定发送紧急求助？"
+        description="即将向景区应急中心与 999 发送您的实时定位与求助信息。请确认确实需要紧急援助。"
+        confirmText="确定发送"
+        cancelText="取消"
+        onConfirm={() => {
+          if (pendingConfirm) sendQuickHelp(pendingConfirm);
+          setPendingConfirm(null);
+        }}
+        onCancel={() => setPendingConfirm(null)}
+      />
     </div>
   );
 }

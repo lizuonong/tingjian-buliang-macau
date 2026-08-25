@@ -57,26 +57,35 @@ export default function HearingAssistant() {
 
       {/* 拍照区 */}
       <section aria-labelledby="capture-heading" className="card-surface p-5">
-        <h2 id="capture-heading" className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-900">
+        <h2 id="capture-heading" className="mb-1 flex items-center gap-2 text-lg font-bold text-gray-900">
           <Camera aria-hidden="true" className="h-5 w-5 text-brand-600" />
           拍照识别
         </h2>
+        <p className="mb-4 text-sm leading-relaxed text-gray-600">
+          点击下方按钮，模拟打开相机拍照并识别对应内容。
+        </p>
         <div className="grid grid-cols-2 gap-3">
           <button
             type="button"
             onClick={() => capture('menu')}
-            className="focus-ring flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-xl border-2 border-gray-200 bg-white text-gray-800 hover:border-brand-400 hover:bg-brand-50"
+            className="focus-ring flex min-h-[96px] flex-col items-center justify-center gap-2 rounded-xl border-2 border-gray-200 bg-white text-gray-800 hover:border-brand-400 hover:bg-brand-50"
           >
-            <Utensils aria-hidden="true" className="h-8 w-8 text-brand-600" />
-            <span className="text-base font-semibold">识别菜单</span>
+            <span className="flex items-center gap-2">
+              <Camera aria-hidden="true" className="h-5 w-5 text-alert-600" />
+              <Utensils aria-hidden="true" className="h-8 w-8 text-brand-600" />
+            </span>
+            <span className="text-base font-semibold">拍照识别菜单</span>
           </button>
           <button
             type="button"
             onClick={() => capture('sign')}
-            className="focus-ring flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-xl border-2 border-gray-200 bg-white text-gray-800 hover:border-brand-400 hover:bg-brand-50"
+            className="focus-ring flex min-h-[96px] flex-col items-center justify-center gap-2 rounded-xl border-2 border-gray-200 bg-white text-gray-800 hover:border-brand-400 hover:bg-brand-50"
           >
-            <Signpost aria-hidden="true" className="h-8 w-8 text-brand-600" />
-            <span className="text-base font-semibold">识别路牌</span>
+            <span className="flex items-center gap-2">
+              <Camera aria-hidden="true" className="h-5 w-5 text-alert-600" />
+              <Signpost aria-hidden="true" className="h-8 w-8 text-brand-600" />
+            </span>
+            <span className="text-base font-semibold">拍照识别路牌</span>
           </button>
         </div>
       </section>

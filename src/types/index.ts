@@ -2,20 +2,6 @@
  * 全局类型定义 —— 听见·步量澳门
  */
 
-/** 无障碍需求类别 */
-export type A11yNeed =
-  | 'mobility' // 行动障碍
-  | 'visual' // 视觉障碍
-  | 'hearing' // 听觉障碍
-  | 'elderly'; // 长者模式
-
-/** 需求条目元数据 */
-export interface A11yNeedItem {
-  id: A11yNeed;
-  title: string;
-  description: string;
-}
-
 /** 设施状态 */
 export type FacilityStatus = 'open' | 'maintenance' | 'closed';
 
@@ -67,7 +53,6 @@ export interface SOSQuickItem {
 
 /** 页面导航 */
 export type PageId =
-  | 'setup' // 01 需求定制
   | 'spot' // 04 景点详情
   | 'vision' // 05 AI 视觉导览
   | 'hearing' // 06 听障沟通助手
