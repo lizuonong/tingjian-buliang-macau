@@ -1,19 +1,21 @@
-import { Maximize2, MessageSquareText, Send, Signpost, Utensils } from 'lucide-react';
+import { Maximize2, MessageSquareText, Mic, Send, Utensils } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import FlipCard from '../components/FlipCard';
 import IconButton from '../components/IconButton';
 import PageHeader from '../components/PageHeader';
 import type { RecognitionResult } from '../types';
+
 /**
  * 06 听障沟通助手 (Hearing Assistant) —— 聊天记录式界面
  *
  * 像即时通讯一样交流：上方为聊天消息气泡（可滚动、新消息自动到底），
- * 下方为快捷识别工具（菜单 / 路牌）与文本输入栏。
+ * 下方为快捷工具（识别菜单 / 听取语音）与文本输入栏。
  *
  * 保留的必要功能：
- *  1. 拍照识别（菜单 / 路牌）→ 生成识别结果卡片消息（FlipCard，可翻转 / 全屏大字出示）
- *  2. 打字沟通 → 发送文本消息
- *  3. 全屏大字展示 → 识别结果卡片、用户文本消息均可一键全屏大字出示给他人
+ *  1. 拍照识别（菜单）→ 生成识别结果卡片消息（FlipCard，可翻转 / 全屏大字出示）
+ *  2. 听取语音 → 全屏大字展示「我是听障人士」，请对方对着手机说话，模拟语音转文字
+ *  3. 打字沟通 → 发送文本消息
+ *  4. 全屏大字展示 → 识别结果卡片、用户文本消息均可一键全屏大字出示给他人
  */
 
 /** 消息类型：文本 或 识别结果 */
@@ -35,28 +37,23 @@ const MOCK_MENU: RecognitionResult = {
   capturedAt: '刚刚',
 };
 
-const MOCK_SIGN: RecognitionResult = {
-  id: 'sign-1',
-  kind: 'sign',
-  title: '路牌识别',
-  lines: ['议事亭前地', '→ 左侧 100 米', '大三巴牌坊 ↗ 直行 400 米'],
-  confidence: 0.98,
-  capturedAt: '刚刚',
-};
-
 export default function HearingAssistant() {
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     {
       id: 'welcome',
       role: 'assistant',
       kind: 'text',
-      text: '您好！我可以帮您拍照识别菜单、路牌，也能直接打字沟通。识别结果可一键全屏大字展示，方便直接出示给他人。',
+      text: '您好！我可以帮您拍照识别菜单、打字沟通、听取对方语音，识别结果可一键全屏大字展示，方便直接出示给他人。',
     },
   ]);
   const [input, setInput] = useState('');
   const [fullscreenText, setFullscreenText] = useState<string | null>(null);
+  const [voiceOpen, setVoiceOpen] = useState(false); // 听取语音大字模态
+  const [listening, setListening] = useState(false); // 是否正在模拟听取对方说话
   const listRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const voiceCloseBtnRef = useRef<HTMLButtonElement>(null);
+  const voiceTimer = useRef<number | null>(null);
   const idRef = useRef(0);
   const nextId = () => {
     idRef.current += 1;
@@ -68,7 +65,7 @@ export default function HearingAssistant() {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
-  /** 全屏大字模态：Esc 关闭 + 锁定滚动 + 聚焦关闭按钮 */
+  /** 全屏大字模态（用户文本出示）：Esc 关闭 + 锁定滚动 + 聚焦关闭按钮 */
   useEffect(() => {
     if (!fullscreenText) return;
     closeBtnRef.current?.focus();
@@ -82,6 +79,21 @@ export default function HearingAssistant() {
       document.body.style.overflow = '';
     };
   }, [fullscreenText]);
+
+  /** 听取语音大字模态：Esc 关闭 + 锁定滚动 + 聚焦关闭按钮 */
+  useEffect(() => {
+    if (!voiceOpen) return;
+    voiceCloseBtnRef.current?.focus();
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeVoice();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [voiceOpen]);
 
   /** 发送文本消息（打字沟通） */
   const sendText = () => {
@@ -102,18 +114,44 @@ export default function HearingAssistant() {
     }, 400);
   };
 
-  /** 拍照识别（菜单 / 路牌）→ 生成识别结果卡片消息 */
-  const capture = (kind: 'menu' | 'sign') => {
-    const mock = kind === 'menu' ? MOCK_MENU : MOCK_SIGN;
+  /** 拍照识别（菜单）→ 生成识别结果卡片消息 */
+  const capture = () => {
     setMessages((prev) => [
       ...prev,
       {
         id: nextId(),
         role: 'assistant',
         kind: 'recognition',
-        result: { ...mock, id: `${mock.id}-${Date.now()}`, capturedAt: '刚刚' },
+        result: { ...MOCK_MENU, id: `${MOCK_MENU.id}-${Date.now()}`, capturedAt: '刚刚' },
       },
     ]);
+  };
+
+  /** 打开「听取语音」大字展示（请对方对着手机说话） */
+  const openVoice = () => {
+    setVoiceOpen(true);
+    setListening(false);
+  };
+
+  /** 关闭「听取语音」模态 */
+  const closeVoice = () => {
+    if (voiceTimer.current) clearTimeout(voiceTimer.current);
+    setVoiceOpen(false);
+    setListening(false);
+  };
+
+  /** 开始听取：模拟对方语音转文字，结束后把文字加入聊天记录 */
+  const startListening = () => {
+    setListening(true);
+    voiceTimer.current = window.setTimeout(() => {
+      const transcript = '您好，我想请问无障碍通道怎么走？';
+      setMessages((prev) => [
+        ...prev,
+        { id: nextId(), role: 'assistant', kind: 'text', text: `听到对方说：${transcript}` },
+      ]);
+      setVoiceOpen(false);
+      setListening(false);
+    }, 3000);
   };
 
   return (
@@ -163,11 +201,11 @@ export default function HearingAssistant() {
         ))}
       </div>
 
-      {/* 快捷识别工具（拍照识别） */}
+      {/* 快捷工具（拍照识别 / 听取语音） */}
       <div className="grid grid-cols-2 gap-3">
         <button
           type="button"
-          onClick={() => capture('menu')}
+          onClick={capture}
           className="focus-ring flex min-h-[56px] items-center justify-center gap-2 rounded-xl border-2 border-gray-200 bg-white text-base font-semibold text-gray-800 hover:border-brand-400 hover:bg-brand-50"
         >
           <Utensils aria-hidden="true" className="h-5 w-5 text-brand-600" />
@@ -175,11 +213,11 @@ export default function HearingAssistant() {
         </button>
         <button
           type="button"
-          onClick={() => capture('sign')}
-          className="focus-ring flex min-h-[56px] items-center justify-center gap-2 rounded-xl border-2 border-gray-200 bg-white text-base font-semibold text-gray-800 hover:border-brand-400 hover:bg-brand-50"
+          onClick={openVoice}
+          className="focus-ring flex min-h-[56px] items-center justify-center gap-2 rounded-xl border-2 border-brand-300 bg-brand-50 text-base font-semibold text-brand-700 hover:border-brand-500 hover:bg-brand-100"
         >
-          <Signpost aria-hidden="true" className="h-5 w-5 text-brand-600" />
-          识别路牌
+          <Mic aria-hidden="true" className="h-5 w-5 text-brand-600" />
+          听取语音
         </button>
       </div>
 
@@ -231,6 +269,62 @@ export default function HearingAssistant() {
           </div>
           <div className="flex flex-1 items-center justify-center overflow-y-auto p-6 text-center">
             <p className="text-a11y-3xl font-bold leading-snug text-white">{fullscreenText}</p>
+          </div>
+        </div>
+      )}
+
+      {/* 听取语音大字模态（请对方对着手机说话） */}
+      {voiceOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="听取语音"
+          className="fixed inset-0 z-50 flex flex-col bg-black"
+        >
+          <div className="flex items-center justify-between bg-gray-900 p-3">
+            <span className="text-base font-semibold text-white">听取语音</span>
+            <button
+              ref={voiceCloseBtnRef}
+              type="button"
+              onClick={closeVoice}
+              className="focus-ring min-h-[44px] rounded-lg px-4 text-base font-semibold text-white hover:bg-white/10"
+            >
+              关闭 ✕
+            </button>
+          </div>
+
+          <div className="flex flex-1 flex-col items-center justify-center gap-6 overflow-y-auto p-6 text-center">
+            <span aria-hidden="true" className="text-6xl">🤝</span>
+            <p className="text-a11y-3xl font-bold leading-snug text-white">
+              您好，我是听障人士。
+              <br />
+              请您对着手机说话，
+              <br />
+              我会看到您的语音文字。谢谢！
+            </p>
+
+            {listening ? (
+              <p
+                className="flex items-center gap-2 text-a11y-xl font-semibold text-brand-300"
+                aria-live="polite"
+              >
+                <Mic aria-hidden="true" className="h-8 w-8 animate-pulse" />
+                请说话…（正在听取）
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={startListening}
+                className="focus-ring inline-flex min-h-[64px] items-center gap-2 rounded-2xl bg-white px-8 text-xl font-bold text-gray-900 transition-colors hover:bg-gray-100"
+              >
+                <Mic aria-hidden="true" className="h-6 w-6" />
+                开始听取
+              </button>
+            )}
+
+            <p className="max-w-md text-a11y-xl leading-relaxed text-gray-300">
+              对方说完后，语音将转为文字并显示在聊天记录中。
+            </p>
           </div>
         </div>
       )}
