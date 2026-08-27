@@ -25,6 +25,19 @@ export interface CrowdAlert {
   urgent: boolean;
 }
 
+/** 景点（含设施与推荐所需数据），数据来源：澳门旅游局无障碍旅游指南 */
+export interface Spot {
+  id: string;
+  name: string;
+  address: string;
+  /** 与用户的模拟距离（km），可接入真实定位后覆盖 */
+  distanceKm: number;
+  /** 无障碍水平评分 0-5，基于官网「设施无障碍水平」归类 */
+  accessibilityScore: number;
+  description: string;
+  facilities: Facility[];
+}
+
 /** 照片识别结果 */
 export interface RecognitionResult {
   id: string;
