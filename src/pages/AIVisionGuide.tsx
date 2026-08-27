@@ -114,7 +114,7 @@ export default function AIVisionGuide() {
       <PageHeader
         icon={<Eye className="h-6 w-6" />}
         title="AI 视觉导览"
-        subtitle="对准前方景物，AI 将实时识别并语音播报无障碍路径信息。"
+        subtitle="对准前方景物，自动播报无障碍路线。"
       />
 
       {!supported && (

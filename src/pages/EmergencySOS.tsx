@@ -58,7 +58,7 @@ export default function EmergencySOS() {
       <PageHeader
         icon={<ShieldAlert className="h-6 w-6" />}
         title="一键 SOS"
-        subtitle="紧急时使用。长按 3 秒触发，期间松手即可取消，触发后需在弹窗中确认发送，防止误触。"
+        subtitle="长按 3 秒触发，松手即取消，防误触。"
       />
 
       {/* 长按触发按钮 */}
@@ -68,7 +68,7 @@ export default function EmergencySOS() {
       >
         <SOSButton onTrigger={() => setPendingConfirm('emergency')} />
         <p className="max-w-md text-center text-sm leading-relaxed text-gray-600">
-          「{sentCategory === 'emergency' ? '已向景区应急中心发送定位与求助' : '长按按钮 3 秒触发，随后需确认发送'}」
+          {sentCategory === 'emergency' ? '已向应急中心发送定位与求助' : '长按按钮 3 秒触发'}
         </p>
       </section>
 
@@ -127,19 +127,6 @@ export default function EmergencySOS() {
         <p role="status" aria-live="polite" className="mt-3 sr-only">
           {sentCategory ? `已发送「${QUICK_ITEMS.find((i) => i.id === sentCategory)?.title}」求助` : ''}
         </p>
-      </section>
-
-      {/* 使用提示 */}
-      <section
-        aria-label="使用提示"
-        className="rounded-2xl border-2 border-dashed border-brand-300 bg-brand-50 p-5"
-      >
-        <h3 className="text-base font-bold text-brand-900">使用提示</h3>
-        <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-brand-900">
-          <li>按住红色按钮满 3 秒即触发，中途松手立即取消。</li>
-          <li>触发后会弹出确认弹窗，需点击「确定发送」才会真正发出求助，进一步防误触。</li>
-          <li>发送的内容包含您的实时定位与所选障碍类型。</li>
-        </ul>
       </section>
 
       {/* 发送前二次确认弹窗 */}

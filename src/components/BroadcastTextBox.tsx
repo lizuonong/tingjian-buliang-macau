@@ -24,11 +24,10 @@ export default function BroadcastTextBox({
       aria-live="polite"
       className="card-surface relative overflow-hidden p-5 sm:p-6"
     >
-      <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-gray-900">
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-gray-900">
         <span aria-hidden="true" className="h-6 w-1.5 rounded-full bg-brand-500" />
         播报文本
       </h2>
-      <p className="mb-4 text-sm text-gray-600">点击任意句子可重新朗读该句。</p>
 
       <ol className="space-y-2">
         {sentences.map((s, idx) => {
