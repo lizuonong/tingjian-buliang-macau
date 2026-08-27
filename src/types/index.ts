@@ -25,12 +25,6 @@ export interface CrowdAlert {
   urgent: boolean;
 }
 
-/** 播报句子 */
-export interface SpeechSentence {
-  id: number;
-  text: string;
-}
-
 /** 照片识别结果 */
 export interface RecognitionResult {
   id: string;
