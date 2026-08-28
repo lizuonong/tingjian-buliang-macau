@@ -12,14 +12,38 @@ npm run dev     # http://localhost:5173
 npm run build   # 类型检查 + 生产构建
 ```
 
+## 菜单识别（千问多模态后端对接）
+
+沟通助手「识别菜单」调用千问多模态模型（`qwen3.7-flash-2026-07-15`）识别菜单图片，
+后端由 HP-Macau Agent（FastAPI）提供：
+
+- 端点：`POST /api/vision/menu`（multipart：`image` + `target`，默认 `zh`）
+- 返回：`{ status, menu:[{ name, price, intro, detail, translation }], summary }`
+- 开发代理：Vite 将 `/api` → `http://127.0.0.1:8000`
+
+### 让识别真正工作（本机演示）
+
+1. 启动千问后端（同学侧）：
+
+   ```bash
+   D:\Effy\anaconda3\envs\qwenpaw\python.exe -X utf8 D:\Desktop\Doing\阿里AI竞赛\QwenPaw-vs\hear-pace-macau\api\run_bridge.py
+   ```
+
+2. 打开 `http://localhost:5173` → 沟通助手 → 「识别菜单」（手机将直接调用后置摄像头，桌面为文件选择）→ 拍菜单照片 → 返回结构化菜品与推荐。
+
+> 后端未启动时前端会自动降级展示示例菜单并提示，不会报错。
+>
+> ⚠️ 后端仅在本机运行；GitHub Pages 线上版无法访问 `127.0.0.1:8000`，
+> 需将后端部署到公网后用环境变量 `VITE_VISION_API` 指定其地址。
+
 ## 页面与核心功能
 
 | 模块 | 文件 | 核心功能 |
 | --- | --- | --- |
-| 04 景点详情页 | `src/pages/SpotDetail.tsx` | 无障碍设施卡片（入口/升降梯/卫生间/车位）+ 状态标签；众包突发障碍实时提醒（可刷新） |
-| 05 AI 视觉导览 | `src/pages/AIVisionGuide.tsx` | 语音控制条（播放/暂停、逐句朗读 ≥64px 大按钮，Web Speech API 真实朗读）；播报文本框实时高亮当前句 |
-| 06 听障沟通助手 | `src/pages/HearingAssistant.tsx` | 拍照识别（菜单/路牌模拟）+ 3D 翻转卡片 + 一键全屏大字展示；打字沟通大字出示 |
-| 07 一键 SOS | `src/pages/EmergencySOS.tsx` | 长按 3 秒触发（环形倒计时动画 + 防误触取消 + 发送前确定弹窗）；道路受阻/身体不适/设备损坏快速求助卡 |
+| 04 景点详情页 | `src/pages/SpotDetail.tsx` | 切换景点（下拉）+ 无障碍水平/距离加权推荐；设施卡片（入口/升降梯/卫生间/通道）+ 状态标签 |
+| 05 AI 视觉导览 | `src/pages/AIVisionGuide.tsx` | 「豆包打电话」式语音通话界面：摄像头识别画面 + AI 语音球 + 流式文字 + 说话/静音/结束控制（预留千问流式接口） |
+| 06 听障沟通助手 | `src/pages/HearingAssistant.tsx` | 聊天式界面：识别菜单（千问 API）/ 听取语音（全屏大字请对方说话）/ 打字沟通，均支持全屏大字出示 |
+| 07 一键 SOS | `src/pages/EmergencySOS.tsx` | 长按 3 秒触发（环形倒计时 + 防误触 + 发送前确定弹窗）；道路受阻/身体不适/设备损坏快速求助卡 |
 
 ## 可复用组件（`src/components`）
 
@@ -28,7 +52,6 @@ npm run build   # 类型检查 + 生产构建
 - `FacilityCard` — 设施卡片
 - `SOSButton` — 长按 3 秒触发（pointer/keyboard 双通道 + rAF 进度环）
 - `ConfirmDialog` — 发送前二次确认弹窗（`role="alertdialog"` + 焦点管理 + Esc 关闭）
-- `VoiceControlBar` / `BroadcastTextBox` — 语音控制与高亮播报
 - `FlipCard` — 翻转/全屏大字模态（Esc 关闭 + 焦点管理）
 - `PageHeader` / `A11yModeToggle` — 页头与无障碍模式切换
 
