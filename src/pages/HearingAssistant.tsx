@@ -1,5 +1,6 @@
 import { Maximize2, MessageSquareText, Mic, Send, Utensils } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { recognizeMenu } from '../api/vision';
 import FlipCard from '../components/FlipCard';
 import IconButton from '../components/IconButton';
 import PageHeader from '../components/PageHeader';
@@ -50,7 +51,9 @@ export default function HearingAssistant() {
   const [fullscreenText, setFullscreenText] = useState<string | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false); // 听取语音大字模态
   const [listening, setListening] = useState(false); // 是否正在模拟听取对方说话
+  const [uploading, setUploading] = useState(false); // 是否正在上传/识别菜单
   const listRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const voiceCloseBtnRef = useRef<HTMLButtonElement>(null);
   const voiceTimer = useRef<number | null>(null);
@@ -115,16 +118,67 @@ export default function HearingAssistant() {
   };
 
   /** 拍照识别（菜单）→ 生成识别结果卡片消息 */
+  /** 触发选择图片（拍照/相册）用于菜单识别 */
   const capture = () => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: nextId(),
-        role: 'assistant',
-        kind: 'recognition',
-        result: { ...MOCK_MENU, id: `${MOCK_MENU.id}-${Date.now()}`, capturedAt: '刚刚' },
-      },
-    ]);
+    fileInputRef.current?.click();
+  };
+
+  /**
+   * 处理用户选择的菜单图片 → 调用千问菜单识别 API → 生成识别结果消息
+   * 若后端未启动或识别失败，降级展示示例菜单并提示
+   */
+  const handleMenuImage = async (file?: File) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { menu, summary } = await recognizeMenu(file);
+      const lines = menu.map((m) => {
+        const price = m.price ? ` —— ${m.price}` : '';
+        const intro = m.intro ? `（${m.intro}）` : '';
+        return `${m.name}${price}${intro}`;
+      });
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextId(),
+          role: 'assistant',
+          kind: 'recognition',
+          result: {
+            id: `menu-${Date.now()}`,
+            kind: 'menu',
+            title: '餐厅菜单识别',
+            lines: lines.length ? lines : ['（未识别到菜品）'],
+            confidence: 1,
+            capturedAt: '刚刚',
+          },
+        },
+      ]);
+      if (summary) {
+        setMessages((prev) => [
+          ...prev,
+          { id: nextId(), role: 'assistant', kind: 'text', text: `推荐：${summary}` },
+        ]);
+      }
+    } catch (err) {
+      // 降级：后端不可达时展示示例菜单，并提示
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextId(),
+          role: 'assistant',
+          kind: 'recognition',
+          result: { ...MOCK_MENU, id: `menu-${Date.now()}`, capturedAt: '刚刚' },
+        },
+        {
+          id: nextId(),
+          role: 'assistant',
+          kind: 'text',
+          text: '未能连接菜单识别服务，已展示示例菜单。请确认千问识别后端已启动。',
+        },
+      ]);
+    } finally {
+      setUploading(false);
+    }
   };
 
   /** 打开「听取语音」大字展示（请对方对着手机说话） */
@@ -201,15 +255,29 @@ export default function HearingAssistant() {
         ))}
       </div>
 
+      {/* 隐藏相机输入：点击「识别菜单」直接调用手机后置摄像头拍照识别 */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="sr-only"
+        onChange={(e) => {
+          handleMenuImage(e.target.files?.[0]);
+          e.target.value = '';
+        }}
+      />
+
       {/* 快捷工具（拍照识别 / 听取语音） */}
       <div className="grid grid-cols-2 gap-3">
         <button
           type="button"
           onClick={capture}
-          className="focus-ring flex min-h-[56px] items-center justify-center gap-2 rounded-xl border-2 border-gray-200 bg-white text-base font-semibold text-gray-800 hover:border-brand-400 hover:bg-brand-50"
+          disabled={uploading}
+          className="focus-ring flex min-h-[56px] items-center justify-center gap-2 rounded-xl border-2 border-gray-200 bg-white text-base font-semibold text-gray-800 hover:border-brand-400 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Utensils aria-hidden="true" className="h-5 w-5 text-brand-600" />
-          识别菜单
+          {uploading ? '识别中…' : '识别菜单'}
         </button>
         <button
           type="button"
