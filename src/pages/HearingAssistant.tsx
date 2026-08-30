@@ -1,10 +1,10 @@
 import { Maximize2, MessageSquareText, Mic, Send, Utensils } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { recognizeMenu } from '../api/vision';
-import FlipCard from '../components/FlipCard';
+import type { MenuItem } from '../api/vision';
 import IconButton from '../components/IconButton';
+import OrderCard from '../components/OrderCard';
 import PageHeader from '../components/PageHeader';
-import type { RecognitionResult } from '../types';
 
 /**
  * 06 听障沟通助手 (Hearing Assistant) —— 聊天记录式界面
@@ -13,30 +13,24 @@ import type { RecognitionResult } from '../types';
  * 下方为快捷工具（识别菜单 / 听取语音）与文本输入栏。
  *
  * 保留的必要功能：
- *  1. 拍照识别（菜单）→ 生成识别结果卡片消息（FlipCard，可翻转 / 全屏大字出示）
+ *  1. 拍照识别（菜单）→ 生成点餐卡片（OrderCard，可勾选餐品 + 全屏大字出示）
  *  2. 听取语音 → 全屏大字展示「我是听障人士」，请对方对着手机说话，模拟语音转文字
  *  3. 打字沟通 → 发送文本消息
  *  4. 全屏大字展示 → 识别结果卡片、用户文本消息均可一键全屏大字出示给他人
  */
 
-/** 消息类型：文本 或 识别结果 */
+/** 消息类型：文本 / 点餐卡片 */
 type ChatMessage =
   | { id: string; role: 'user' | 'assistant'; kind: 'text'; text: string }
-  | { id: string; role: 'assistant'; kind: 'recognition'; result: RecognitionResult };
+  | { id: string; role: 'assistant'; kind: 'order'; menu: MenuItem[]; summary?: string };
 
-const MOCK_MENU: RecognitionResult = {
-  id: 'menu-1',
-  kind: 'menu',
-  title: '餐厅菜单识别',
-  lines: [
-    '招牌猪扒包 —— 28 澳门元',
-    '葡式蛋挞（2 件）—— 20 澳门元',
-    '冻柠茶 —— 16 澳门元',
-    '今日特价：咖喱牛杂 —— 35 澳门元',
-  ],
-  confidence: 0.96,
-  capturedAt: '刚刚',
-};
+/** 降级示例菜单（后端不可达时使用，保持结构化以便渲染点餐卡片） */
+const MOCK_MENU: MenuItem[] = [
+  { name: '招牌猪扒包', price: '28 澳门元', intro: '', detail: '配冰柠茶', translation: '' },
+  { name: '葡式蛋挞（2 件）', price: '20 澳门元', intro: '', detail: '新鲜出炉', translation: '' },
+  { name: '冻柠茶', price: '16 澳门元', intro: '', detail: '少冰', translation: '' },
+  { name: '咖喱牛杂', price: '35 澳门元', intro: '今日特价', detail: '微辣', translation: '' },
+];
 
 export default function HearingAssistant() {
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
@@ -124,50 +118,34 @@ export default function HearingAssistant() {
   };
 
   /**
-   * 处理用户选择的菜单图片 → 调用千问菜单识别 API → 生成识别结果消息
-   * 若后端未启动或识别失败，降级展示示例菜单并提示
+   * 处理用户选择的菜单图片 → 调用千问菜单识别 API → 生成点餐卡片消息
+   * 若后端未启动或识别失败，降级展示示例点餐卡片并提示
    */
   const handleMenuImage = async (file?: File) => {
     if (!file) return;
     setUploading(true);
     try {
       const { menu, summary } = await recognizeMenu(file);
-      const lines = menu.map((m) => {
-        const price = m.price ? ` —— ${m.price}` : '';
-        const intro = m.intro ? `（${m.intro}）` : '';
-        return `${m.name}${price}${intro}`;
-      });
       setMessages((prev) => [
         ...prev,
         {
           id: nextId(),
           role: 'assistant',
-          kind: 'recognition',
-          result: {
-            id: `menu-${Date.now()}`,
-            kind: 'menu',
-            title: '餐厅菜单识别',
-            lines: lines.length ? lines : ['（未识别到菜品）'],
-            confidence: 1,
-            capturedAt: '刚刚',
-          },
+          kind: 'order',
+          menu: menu.length ? menu : MOCK_MENU,
+          summary,
         },
       ]);
-      if (summary) {
-        setMessages((prev) => [
-          ...prev,
-          { id: nextId(), role: 'assistant', kind: 'text', text: `推荐：${summary}` },
-        ]);
-      }
     } catch (err) {
-      // 降级：后端不可达时展示示例菜单，并提示
+      // 降级：后端不可达时展示示例点餐卡片，并提示
       setMessages((prev) => [
         ...prev,
         {
           id: nextId(),
           role: 'assistant',
-          kind: 'recognition',
-          result: { ...MOCK_MENU, id: `menu-${Date.now()}`, capturedAt: '刚刚' },
+          kind: 'order',
+          menu: MOCK_MENU,
+          summary: '示例菜单（后端未连接）',
         },
         {
           id: nextId(),
@@ -225,8 +203,8 @@ export default function HearingAssistant() {
       >
         {messages.map((msg) => (
           <div key={msg.id}>
-            {msg.kind === 'recognition' ? (
-              <FlipCard result={msg.result} />
+            {msg.kind === 'order' ? (
+              <OrderCard menu={msg.menu} summary={msg.summary} />
             ) : (
               <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div
