@@ -1,9 +1,10 @@
 import { Building2, DoorOpen, Info, MapPin, Sparkles, Users, Wind } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { fetchSpots } from '../api/spots';
 import FacilityCard from '../components/FacilityCard';
 import PageHeader from '../components/PageHeader';
-import { recommendReason, recommendSpots, SPOTS } from '../data/spots';
+import { recommendReason, recommendSpots } from '../data/spots';
 import type { Facility, Spot } from '../types';
 
 /**
@@ -11,7 +12,7 @@ import type { Facility, Spot } from '../types';
  * - 切换景点：通过顶部下拉框切换当前景点
  * - 展示当前景点的无障碍设施（入口 / 升降梯 / 卫生间 / 通道等）与状态标签
  * - 景点推荐：综合「无障碍水平评分」+「距离」加权排序，可一键切换
- * 数据来源：澳门旅游局无障碍旅游指南
+ * 数据来源：优先后端（实时同步澳门旅游局官网），不可达时降级到本地数据
  */
 
 const FACILITY_ICONS: Record<string, LucideIcon> = {
@@ -23,15 +24,47 @@ const FACILITY_ICONS: Record<string, LucideIcon> = {
 };
 
 export default function SpotDetail() {
-  const [currentId, setCurrentId] = useState<string>(SPOTS[0].id);
-  const current = SPOTS.find((s) => s.id === currentId) ?? SPOTS[0];
-  const recommendations = recommendSpots(current.id);
+  const [spots, setSpots] = useState<Spot[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentId, setCurrentId] = useState<string>('');
+
+  /** 从后端拉取景点数据（失败降级本地） */
+  useEffect(() => {
+    let mounted = true;
+    fetchSpots().then((data) => {
+      if (!mounted) return;
+      setSpots(data);
+      setCurrentId((prev) => prev || data[0]?.id || '');
+      setLoading(false);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const current = spots.find((s) => s.id === currentId) ?? spots[0];
+  const recommendations = current ? recommendSpots(current.id, spots) : [];
 
   /** 切换景点 */
   const switchSpot = (id: string) => {
     setCurrentId(id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  if (loading || !current) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-5">
+        <PageHeader
+          icon={<MapPin className="h-6 w-6" />}
+          title="景点详情"
+          subtitle="正在同步澳门旅游局无障碍数据…"
+        />
+        <div className="card-surface p-8 text-center text-gray-500" role="status">
+          加载中…
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
@@ -52,7 +85,7 @@ export default function SpotDetail() {
           onChange={(e) => switchSpot(e.target.value)}
           className="focus-ring min-h-[52px] w-full rounded-xl border-2 border-gray-300 bg-white px-4 text-base text-gray-900 transition-colors hover:border-brand-400"
         >
-          {SPOTS.map((s) => (
+          {spots.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}（无障碍 {s.accessibilityScore.toFixed(1)} · {s.distanceKm.toFixed(1)} km）
             </option>

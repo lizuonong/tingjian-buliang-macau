@@ -12,6 +12,20 @@ npm run dev     # http://localhost:5173
 npm run build   # 类型检查 + 生产构建
 ```
 
+## 景点数据后端（实时同步澳门旅游局官网）
+
+景点详情页的无障碍数据优先从后端拉取（73 个景点，实时同步官网），后端不可达时自动降级到本地数据。
+
+```bash
+# 启动后端（Python + FastAPI，端口 8000）
+.venv\Scripts\python.exe -m pip install -r server\requirements.txt
+.venv\Scripts\python.exe -m uvicorn server.main:app --host 127.0.0.1 --port 8000
+```
+
+后端从官网 JSON 接口 `https://www.macaotourism.gov.mo/api/accessibility/zh-hans/sights.json` 抓取，
+`GET /api/spots` 返回全部景点（含出入口/通道/升降机/公厕/停车场/育婴室设施水平），6 小时缓存。
+开发时 Vite 将 `/api` → `http://127.0.0.1:8000`。详见 `server/README.md`。
+
 ## 菜单识别（千问多模态后端对接）
 
 沟通助手「识别菜单」调用千问多模态模型（`qwen3.7-flash-2026-07-15`）识别菜单图片，

@@ -29,6 +29,12 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Python 后端
+.venv/
+server/cache/
+__pycache__/
+*.pyc
+
 # 环境变量（token 等敏感信息）
 .env
 .env.*
