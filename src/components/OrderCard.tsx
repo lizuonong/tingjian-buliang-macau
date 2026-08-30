@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Maximize2 } from 'lucide-react';
+import { Maximize2, Minus, Plus } from 'lucide-react';
 import type { MenuItem } from '../api/vision';
 
 /**
  * OrderCard —— 内嵌在聊天气泡里的「点餐小列表」
  *
- * 将菜单识别结果（结构化菜品字段）渲染为紧凑的可勾选列表，
- * 贴合在 AI 消息气泡内；选中若干餐品后可一键全屏大字展示给他人看
- * （例如递给服务员）。
+ * 将菜单识别结果（结构化菜品字段）渲染为紧凑列表，贴合在 AI 消息气泡内。
+ * 用「加 / 减」按钮调节每道菜的点餐数量（0 表示未点），
+ * 点击底部「全屏展示」将所选菜品按数量全屏大字展示给他人看。
  *
  * 无障碍约束：
- *  - 每个菜品为 role="checkbox" + aria-checked，勾选状态不依赖颜色
- *  - 全屏模态 role="dialog" aria-modal + Esc 关闭 + 焦点管理 + aria-live 播报
+ *  - 加减按钮均为独立可聚焦按钮，带 aria-label 与 44px 触控区
+ *  - 数量变化用 aria-live 播报，不依赖颜色
+ *  - 全屏模态 role="dialog" aria-modal + Esc 关闭 + 焦点管理
  */
 interface OrderCardProps {
   menu: MenuItem[];
@@ -19,19 +20,15 @@ interface OrderCardProps {
 }
 
 export default function OrderCard({ menu, summary }: OrderCardProps) {
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  /** 每道菜的数量，0 表示未点 */
+  const [qty, setQty] = useState<Record<number, number>>({});
   const [fullscreen, setFullscreen] = useState(false);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
 
-  /** 切换某道菜的选中状态 */
-  const toggleItem = (idx: number) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
-      return next;
-    });
-  };
+  /** 增加数量 */
+  const inc = (idx: number) => setQty((p) => ({ ...p, [idx]: (p[idx] ?? 0) + 1 }));
+  /** 减少数量（最低 0） */
+  const dec = (idx: number) => setQty((p) => ({ ...p, [idx]: Math.max(0, (p[idx] ?? 0) - 1) }));
 
   /** 全屏大字模态：Esc 关闭 + 锁定滚动 + 聚焦关闭按钮 */
   useEffect(() => {
@@ -48,9 +45,9 @@ export default function OrderCard({ menu, summary }: OrderCardProps) {
     };
   }, [fullscreen]);
 
-  /** 选中的菜品（按原顺序） */
-  const selectedItems = menu.filter((_, i) => selected.has(i));
-  const selectedCount = selectedItems.length;
+  /** 选了数量 > 0 的菜品（按原顺序） */
+  const selectedItems = menu.map((item, i) => ({ item, qty: qty[i] ?? 0 })).filter((x) => x.qty > 0);
+  const totalCount = selectedItems.reduce((s, x) => s + x.qty, 0);
 
   return (
     <>
@@ -65,38 +62,50 @@ export default function OrderCard({ menu, summary }: OrderCardProps) {
           <span className="text-xs font-medium text-gray-500">共 {menu.length} 道</span>
         </div>
 
-        {/* 菜品列表（可勾选） */}
+        {/* 菜品列表（加减数量） */}
         <ul className="divide-y divide-gray-100">
           {menu.map((item, idx) => {
-            const checked = selected.has(idx);
+            const n = qty[idx] ?? 0;
             return (
-              <li key={idx}>
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={checked}
-                  aria-label={`${item.name}${item.price ? `，${item.price}` : ''}${checked ? '，已勾选' : ''}`}
-                  onClick={() => toggleItem(idx)}
-                  className={`focus-ring flex min-h-[48px] w-full items-center gap-2.5 px-3 py-2 text-left transition-colors ${
-                    checked ? 'bg-brand-50' : 'bg-white hover:bg-gray-50'
-                  }`}
-                >
-                  <CheckCircle2
-                    aria-hidden="true"
-                    className={`h-5 w-5 shrink-0 ${checked ? 'text-brand-600' : 'text-gray-300'}`}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-gray-900">
-                      {item.name}
-                    </span>
-                    {item.detail && (
-                      <span className="block truncate text-xs text-gray-500">{item.detail}</span>
-                    )}
+              <li key={idx} className="flex items-center gap-2 px-3 py-2">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-gray-900">
+                    {item.name}
                   </span>
-                  {item.price && (
-                    <span className="shrink-0 text-sm font-bold text-brand-700">{item.price}</span>
+                  {item.detail && (
+                    <span className="block truncate text-xs text-gray-500">{item.detail}</span>
                   )}
-                </button>
+                  {item.price && (
+                    <span className="mt-0.5 block text-xs font-bold text-brand-700">{item.price}</span>
+                  )}
+                </span>
+
+                {/* 加减数量控制 */}
+                <span className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    aria-label={`减少${item.name}数量`}
+                    onClick={() => dec(idx)}
+                    disabled={n === 0}
+                    className="focus-ring flex h-11 w-11 items-center justify-center rounded-lg border-2 border-gray-200 bg-white text-brand-700 transition-colors hover:border-brand-400 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Minus aria-hidden="true" className="h-5 w-5" />
+                  </button>
+                  <span
+                    className="min-w-[24px] text-center text-base font-bold text-gray-900"
+                    aria-live="polite"
+                  >
+                    {n}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`增加${item.name}数量`}
+                    onClick={() => inc(idx)}
+                    className="focus-ring flex h-11 w-11 items-center justify-center rounded-lg border-2 border-brand-300 bg-brand-50 text-brand-700 transition-colors hover:border-brand-500 hover:bg-brand-100"
+                  >
+                    <Plus aria-hidden="true" className="h-5 w-5" />
+                  </button>
+                </span>
               </li>
             );
           })}
@@ -107,17 +116,17 @@ export default function OrderCard({ menu, summary }: OrderCardProps) {
           {summary && <p className="mb-2 text-xs leading-relaxed text-gray-500">{summary}</p>}
           <button
             type="button"
-            disabled={selectedCount === 0}
+            disabled={totalCount === 0}
             onClick={() => setFullscreen(true)}
             className="focus-ring inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-to-b from-brand-500 to-brand-600 px-3 text-sm font-bold text-white shadow-md shadow-brand-500/20 transition-colors hover:from-brand-400 hover:to-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Maximize2 aria-hidden="true" className="h-4 w-4" />
-            全屏展示选中（{selectedCount}）
+            全屏展示（{totalCount} 份）
           </button>
         </div>
       </div>
 
-      {/* 全屏大字展示选中的餐品 */}
+      {/* 全屏大字展示所选菜品 */}
       {fullscreen && (
         <div
           role="dialog"
@@ -126,9 +135,7 @@ export default function OrderCard({ menu, summary }: OrderCardProps) {
           className="fixed inset-0 z-50 flex flex-col bg-black"
         >
           <div className="flex items-center justify-between bg-gray-900 p-3">
-            <span className="text-base font-semibold text-white">
-              我的点餐（{selectedCount} 道）
-            </span>
+            <span className="text-base font-semibold text-white">我的点餐（{totalCount} 份）</span>
             <button
               ref={closeBtnRef}
               type="button"
@@ -141,9 +148,11 @@ export default function OrderCard({ menu, summary }: OrderCardProps) {
 
           <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto p-6">
             <ol className="space-y-5 text-center">
-              {selectedItems.map((item) => (
+              {selectedItems.map(({ item, qty }) => (
                 <li key={`${item.name}-${item.price}`}>
-                  <p className="text-a11y-3xl font-bold leading-snug text-white">{item.name}</p>
+                  <p className="text-a11y-3xl font-bold leading-snug text-white">
+                    {item.name} × {qty}
+                  </p>
                   {item.detail && (
                     <p className="mt-1 text-a11y-xl leading-relaxed text-gray-300">{item.detail}</p>
                   )}
