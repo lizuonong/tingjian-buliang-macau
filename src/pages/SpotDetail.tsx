@@ -28,7 +28,7 @@ export default function SpotDetail() {
   const [loading, setLoading] = useState(true);
   const [currentId, setCurrentId] = useState<string>('');
 
-  /** 从后端拉取景点数据（失败降级本地） */
+  /** 从后端拉取景点数据（含按用户定位计算距离，失败降级本地） */
   useEffect(() => {
     let mounted = true;
     fetchSpots().then((data) => {
@@ -57,7 +57,7 @@ export default function SpotDetail() {
         <PageHeader
           icon={<MapPin className="h-6 w-6" />}
           title="景点详情"
-          subtitle="正在同步澳门旅游局无障碍数据…"
+          subtitle="正在同步澳门旅游局无障碍数据，并获取你的位置以计算距离…"
         />
         <div className="card-surface p-8 text-center text-gray-500" role="status">
           加载中…
@@ -71,7 +71,7 @@ export default function SpotDetail() {
       <PageHeader
         icon={<MapPin className="h-6 w-6" />}
         title={current.name}
-        subtitle={`无障碍评分 ${current.accessibilityScore.toFixed(1)} / 5 · ${current.address} · 距此 ${current.distanceKm.toFixed(1)} km`}
+        subtitle={`无障碍评分 ${current.accessibilityScore.toFixed(1)} / 5 · ${current.address}${current.distanceKm != null ? ` · 距此 ${current.distanceKm.toFixed(1)} km` : ''}`}
       />
 
       {/* 切换景点 */}
@@ -87,7 +87,7 @@ export default function SpotDetail() {
         >
           {spots.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.name}（无障碍 {s.accessibilityScore.toFixed(1)} · {s.distanceKm.toFixed(1)} km）
+              {s.name}（无障碍 {s.accessibilityScore.toFixed(1)} · {s.distanceKm != null ? `${s.distanceKm.toFixed(1)} km` : '距离未知'}）
             </option>
           ))}
         </select>

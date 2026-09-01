@@ -119,18 +119,34 @@ def _to_spot(raw: dict, order: int = 0) -> dict:
     address = basic.get("地址", [""])[0] if isinstance(basic.get("地址"), list) else (basic.get("地址") or "")
     hours = basic.get("开放时间", [""])[0] if isinstance(basic.get("开放时间"), list) else (basic.get("开放时间") or "")
 
-    # 模拟距离：基于索引生成 0.4~3.0km，供推荐排序使用（正式版接定位后覆盖）
-    distance = round(0.4 + (order % 7) * 0.4, 1)
+    # 官方坐标（经度, 纬度）
+    coord = raw.get("coordinate") or []
+    lng = float(coord[0]) if len(coord) > 0 and coord[0] not in (None, "") else None
+    lat = float(coord[1]) if len(coord) > 1 and coord[1] not in (None, "") else None
 
     return {
         "id": str(raw.get("id", name)),
         "name": name,
         "address": address,
-        "distanceKm": distance,
+        "lat": lat,
+        "lng": lng,
+        "distanceKm": None,  # 由 /api/spots 根据用户位置计算
         "accessibilityScore": round(score, 1),
         "description": hours or f"{name}的无障碍设施情况，详见下方设施列表。",
         "facilities": _accessibility_to_facilities(acc),
     }
+
+
+def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """计算两点球面距离（公里），Haversine 公式。"""
+    import math
+
+    r = 6371.0  # 地球半径 km
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlng / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
 
 
 def sync_spots(force: bool = False) -> list[dict]:
@@ -167,11 +183,21 @@ def health() -> dict:
 
 
 @app.get("/api/spots")
-def get_spots(force: bool = False) -> dict:
-    """返回全部景点数据（默认走缓存，force=true 强制同步官网）。"""
+def get_spots(force: bool = False, lat: float | None = None, lng: float | None = None) -> dict:
+    """
+    返回全部景点数据。
+
+    - lat / lng：用户当前位置（可选）。提供时按 Haversine 计算每个景点与用户的真实距离
+    - 未提供坐标时 distanceKm 为 null
+    """
     try:
         data = sync_spots(force=force)
-        return {"status": "success", "count": len(data), "spots": data}
+        spots = list(data)
+        if lat is not None and lng is not None:
+            for s in spots:
+                if s.get("lat") is not None and s.get("lng") is not None:
+                    s["distanceKm"] = round(haversine_km(lat, lng, s["lat"], s["lng"]), 1)
+        return {"status": "success", "count": len(spots), "spots": spots}
     except Exception as exc:  # noqa: BLE001
         return {"status": "error", "error": str(exc), "spots": []}
 

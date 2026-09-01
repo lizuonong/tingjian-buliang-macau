@@ -1,7 +1,8 @@
-import { Maximize2, MessageSquareText, Mic, Send, Utensils } from 'lucide-react';
+import { Maximize2, MessageSquareText, Mic, Send, Trash2, Utensils } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { recognizeMenu } from '../api/vision';
 import type { MenuItem } from '../api/vision';
+import ConfirmDialog from '../components/ConfirmDialog';
 import IconButton from '../components/IconButton';
 import OrderCard from '../components/OrderCard';
 import PageHeader from '../components/PageHeader';
@@ -32,20 +33,20 @@ const MOCK_MENU: MenuItem[] = [
   { name: '咖喱牛杂', price: '35 澳门元', intro: '今日特价', detail: '微辣', translation: '' },
 ];
 
+/** 默认欢迎语（清空后重置回该条） */
+const WELCOME_TEXT =
+  '您好！我可以帮您拍照识别菜单、打字沟通、听取对方语音，识别结果可一键全屏大字展示，方便直接出示给他人。';
+
 export default function HearingAssistant() {
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    {
-      id: 'welcome',
-      role: 'assistant',
-      kind: 'text',
-      text: '您好！我可以帮您拍照识别菜单、打字沟通、听取对方语音，识别结果可一键全屏大字展示，方便直接出示给他人。',
-    },
+    { id: 'welcome', role: 'assistant', kind: 'text', text: WELCOME_TEXT },
   ]);
   const [input, setInput] = useState('');
   const [fullscreenText, setFullscreenText] = useState<string | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false); // 听取语音大字模态
   const [listening, setListening] = useState(false); // 是否正在模拟听取对方说话
   const [uploading, setUploading] = useState(false); // 是否正在上传/识别菜单
+  const [confirmClear, setConfirmClear] = useState(false); // 是否确认清空消息
   const listRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
@@ -109,6 +110,17 @@ export default function HearingAssistant() {
         },
       ]);
     }, 400);
+  };
+
+  /** 删除单条消息 */
+  const deleteMessage = (id: string) => {
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+  };
+
+  /** 清空全部消息（重置回欢迎语） */
+  const confirmClearAll = () => {
+    setMessages([{ id: 'welcome', role: 'assistant', kind: 'text', text: WELCOME_TEXT }]);
+    setConfirmClear(false);
   };
 
   /** 拍照识别（菜单）→ 生成识别结果卡片消息 */
@@ -195,12 +207,25 @@ export default function HearingAssistant() {
       />
 
       {/* 聊天记录（可滚动，新消息自动到底） */}
-      <div
-        ref={listRef}
-        role="log"
-        aria-live="polite"
-        className="card-surface h-[52vh] space-y-3 overflow-y-auto p-4"
-      >
+      <div className="card-surface overflow-hidden">
+        <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-2">
+          <span className="text-sm font-semibold text-gray-500">聊天记录</span>
+          <button
+            type="button"
+            onClick={() => setConfirmClear(true)}
+            disabled={messages.length === 0}
+            className="focus-ring inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border-2 border-gray-200 bg-white px-3 text-sm font-semibold text-gray-600 transition-colors hover:border-alert-400 hover:text-alert-600 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Trash2 aria-hidden="true" className="h-4 w-4" />
+            清空消息
+          </button>
+        </div>
+        <div
+          ref={listRef}
+          role="log"
+          aria-live="polite"
+          className="h-[46vh] space-y-3 overflow-y-auto p-4"
+        >
         {messages.map((msg) => (
           <div key={msg.id}>
             {msg.kind === 'order' ? (
@@ -231,6 +256,7 @@ export default function HearingAssistant() {
             )}
           </div>
         ))}
+        </div>
       </div>
 
       {/* 隐藏相机输入：点击「识别菜单」直接调用手机后置摄像头拍照识别 */}

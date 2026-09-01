@@ -5,13 +5,11 @@
  *       千问多模态模型 `qwen3.7-flash-2026-07-15` 识别菜单图片。
  *
  * 端点：POST /api/vision/menu   （multipart/form-data：image + target）
- *   base http://127.0.0.1:8000 ，经 Vite dev 代理 /api → 8000 以规避 CORS。
- *
- * 注意：后端仅在本机运行。部署到 GitHub Pages 后无法访问 127.0.0.1，
- *       需部署公网后端并修改 VITE_VISION_API 环境变量。
+ *   base http://118.31.170.211:8000 （已部署的线上公网后端）。
+ *   可通过 VITE_VISION_API 环境变量覆盖；默认走公网地址。
  */
 
-const VISION_API = import.meta.env.VITE_VISION_API || '/api/vision';
+const VISION_API = import.meta.env.VITE_VISION_API || 'http://118.31.170.211:8000/api/vision';
 
 export interface MenuItem {
   name: string;

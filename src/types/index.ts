@@ -30,8 +30,12 @@ export interface Spot {
   id: string;
   name: string;
   address: string;
-  /** 与用户的模拟距离（km），可接入真实定位后覆盖 */
-  distanceKm: number;
+  /** 经度（官网坐标），可用于地图/距离计算 */
+  lng?: number | null;
+  /** 纬度（官网坐标） */
+  lat?: number | null;
+  /** 与用户当前位置的距离（km）；未定位时为 null */
+  distanceKm: number | null;
   /** 无障碍水平评分 0-5，基于官网「设施无障碍水平」归类 */
   accessibilityScore: number;
   description: string;

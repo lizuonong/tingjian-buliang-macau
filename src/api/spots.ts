@@ -9,9 +9,27 @@ import type { Spot } from '../types';
 
 const SPOTS_API = import.meta.env.VITE_SPOTS_API || '/api/spots';
 
+/** 获取用户当前位置（经纬度），失败返回 null */
+export function getUserLocation(): Promise<{ lat: number; lng: number } | null> {
+  return new Promise((resolve) => {
+    if (!('geolocation' in navigator)) {
+      resolve(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
+    );
+  });
+}
+
 export async function fetchSpots(): Promise<Spot[]> {
   try {
-    const resp = await fetch(SPOTS_API, { method: 'GET' });
+    const loc = await getUserLocation();
+    // 有定位则让后端按用户位置计算各景点真实距离
+    const query = loc ? `?lat=${loc.lat}&lng=${loc.lng}` : '';
+    const resp = await fetch(`${SPOTS_API}${query}`, { method: 'GET' });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     if (data.status === 'success' && Array.isArray(data.spots) && data.spots.length > 0) {

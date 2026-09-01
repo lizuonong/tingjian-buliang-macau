@@ -124,16 +124,19 @@ export function recommendSpots(currentSpotId: string, spots: Spot[] = SPOTS): Sp
   return spots
     .filter((s) => s.id !== currentSpotId)
     .map((s) => {
-      // 无障碍权重 0.6，距离权重 0.4（距离越近分越高）
-      const score = s.accessibilityScore * 0.6 - s.distanceKm * 0.4;
+      // 无障碍权重 0.6，距离权重 0.4（距离越近分越高）；无距离时仅按无障碍排序
+      const distance = s.distanceKm ?? 0;
+      const score = s.accessibilityScore * 0.6 - distance * 0.4;
       return { spot: s, score };
     })
     .sort((a, b) => b.score - a.score)
     .map((r) => r.spot);
 }
 
-/** 根据景点无障碍评分生成推荐理由文案 */
+/** 根据景点无障碍评分与距离生成推荐理由文案 */
 export function recommendReason(spot: Spot): string {
   const scoreText = spot.accessibilityScore >= 4 ? '无障碍设施完善' : '无障碍设施基本可用';
-  return `${scoreText} · 距此 ${spot.distanceKm.toFixed(1)} km`;
+  return spot.distanceKm != null
+    ? `${scoreText} · 距此 ${spot.distanceKm.toFixed(1)} km`
+    : `${scoreText}`;
 }
