@@ -50,6 +50,7 @@ export default function HearingAssistant() {
   const [uploading, setUploading] = useState(false); // 是否正在上传/识别菜单
   const [voiceError, setVoiceError] = useState<string | null>(null); // 听取语音错误提示
   const [voiceBusy, setVoiceBusy] = useState(false); // 正在请求麦克风权限
+  const [voiceProcessing, setVoiceProcessing] = useState(false); // 正在识别语音（转写中）
   const [confirmClear, setConfirmClear] = useState(false); // 是否确认清空消息
   const listRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -192,6 +193,7 @@ export default function HearingAssistant() {
     const sampleRate = sampleRateRef.current || 44100;
     if (ctx) void ctx.close().catch(() => {});
     setListening(false);
+    setVoiceProcessing(true); // 进入转写阶段，模态框显示「正在识别」
 
     // 合并 PCM 分片
     const chunks = chunksRef.current;
@@ -203,6 +205,7 @@ export default function HearingAssistant() {
         ...prev,
         { id: nextId(), role: 'assistant', kind: 'text', text: '未录到有效音频，请重试。' },
       ]);
+      setVoiceProcessing(false);
       setVoiceOpen(false);
       return;
     }
@@ -239,6 +242,7 @@ export default function HearingAssistant() {
         { id: nextId(), role: 'assistant', kind: 'text', text: friendly },
       ]);
     }
+    setVoiceProcessing(false);
     setVoiceOpen(false);
   };
 
@@ -247,6 +251,7 @@ export default function HearingAssistant() {
     setVoiceOpen(true);
     setListening(false);
     setVoiceError(null);
+    setVoiceProcessing(false);
   };
 
   /** 关闭「听取语音」模态 */
@@ -255,6 +260,7 @@ export default function HearingAssistant() {
     stopRecording();
     setVoiceOpen(false);
     setListening(false);
+    setVoiceProcessing(false);
   };
 
   /** 开始听取：录制对方语音（PCM），停止时编码为 WAV 上传转写 */
@@ -510,6 +516,19 @@ export default function HearingAssistant() {
                   <MicOff aria-hidden="true" className="h-6 w-6" />
                   结束并识别
                 </button>
+              </div>
+            ) : voiceProcessing ? (
+              <div className="flex flex-col items-center gap-4">
+                <p
+                  className="flex items-center gap-2 text-a11y-xl font-semibold text-brand-300"
+                  aria-live="polite"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="h-7 w-7 animate-spin rounded-full border-2 border-brand-300 border-t-transparent"
+                  />
+                  正在识别对方的语音…
+                </p>
               </div>
             ) : (
               <button
