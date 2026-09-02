@@ -13,15 +13,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
+import urllib.parse
 from typing import Any
 
+import httpx
 import requests
-from fastapi import FastAPI
+import websockets
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="听见·步量澳门 · 景点数据后端", version="1.0.0")
@@ -242,3 +246,85 @@ if os.path.isdir(os.path.join(_DIST_DIR, "assets")):
         StaticFiles(directory=os.path.join(_DIST_DIR, "assets")),
         name="assets",
     )
+
+
+# ============================================================
+# Agent 反向代理：前端同源 HTTPS 走 /agent/*，本服务转发到本机 Agent (127.0.0.1:8000)
+# 解决「HTTPS 页面调用 http Agent 被浏览器 mixed content 拦截」的问题
+# ============================================================
+_AGENT_BASE = "http://127.0.0.1:8000"
+
+
+@app.api_route("/agent/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+async def agent_http_proxy(path: str, request: Request) -> Response:
+    """转发菜单识别 / 语音转文字等 HTTP 请求到 Agent 后端。"""
+    body = await request.body()
+    url = f"{_AGENT_BASE}/{path}"
+    headers = {
+        k: v
+        for k, v in request.headers.items()
+        if k.lower() not in ("host", "content-length", "accept-encoding")
+    }
+    try:
+        async with httpx.AsyncClient(timeout=None) as client:
+            r = await client.request(
+                request.method,
+                url,
+                content=body,
+                headers=headers,
+                params=dict(request.query_params),
+            )
+    except Exception as exc:  # noqa: BLE001
+        return Response(
+            content=json.dumps({"status": "error", "error": f"proxy failed: {exc}"}).encode(),
+            status_code=502,
+            media_type="application/json",
+        )
+    resp_headers = {
+        k: v
+        for k, v in r.headers.items()
+        if k.lower() not in ("content-length", "content-encoding", "transfer-encoding", "connection")
+    }
+    return Response(content=r.content, status_code=r.status_code, headers=resp_headers)
+
+
+@app.websocket("/agent/ws/video")
+async def agent_ws_proxy(websocket: WebSocket) -> None:
+    """转发实时视频 WebSocket 到 Agent 后端。"""
+    await websocket.accept()
+    qs = dict(websocket.query_params)
+    upstream = "ws://127.0.0.1:8000/ws/video"
+    if qs:
+        upstream += "?" + urllib.parse.urlencode(qs)
+    try:
+        async with websockets.connect(upstream, max_size=16 * 1024 * 1024) as up:
+            async def c2u() -> None:
+                while True:
+                    msg = await websocket.receive()
+                    if msg["type"] == "websocket.disconnect":
+                        break
+                    if msg.get("bytes") is not None:
+                        await up.send(msg["bytes"])
+                    elif msg.get("text") is not None:
+                        await up.send(msg["text"])
+
+            async def u2c() -> None:
+                async for chunk in up:
+                    if isinstance(chunk, bytes):
+                        await websocket.send_bytes(chunk)
+                    else:
+                        await websocket.send_text(chunk)
+
+            t1 = asyncio.create_task(c2u())
+            t2 = asyncio.create_task(u2c())
+            await asyncio.wait({t1, t2}, return_when=asyncio.FIRST_COMPLETED)
+            for t in (t1, t2):
+                t.cancel()
+            await asyncio.gather(t1, t2, return_exceptions=True)
+    except Exception:  # noqa: BLE001
+        pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:  # noqa: BLE001
+            pass

@@ -9,7 +9,7 @@
  *   可通过 VITE_VISION_API 环境变量覆盖；默认走公网地址。
  */
 
-const VISION_API = import.meta.env.VITE_VISION_API || 'http://118.31.170.211:8000/api/vision';
+const VISION_API = import.meta.env.VITE_VISION_API || '/agent/api/vision';
 
 export interface MenuItem {
   name: string;

@@ -9,7 +9,7 @@
  *   可通过 VITE_ASR_API 环境变量覆盖。
  */
 
-const ASR_API = import.meta.env.VITE_ASR_API || 'http://118.31.170.211:8000/api/audio/asr';
+const ASR_API = import.meta.env.VITE_ASR_API || '/agent/api/audio/asr';
 
 export interface AsrResponse {
   status: string;

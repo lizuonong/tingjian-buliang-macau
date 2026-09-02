@@ -9,11 +9,17 @@ export default defineConfig({
   server: {
     port: 5173,
     open: true,
-    // 开发时将 /api 转发到本地千问菜单识别后端（FastAPI），规避跨域
+    // 开发时将 /api 转发到本地景点后端，/agent 转发到公网 Agent 后端，规避跨域
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
+      },
+      '/agent': {
+        target: 'http://118.31.170.211:8000',
+        changeOrigin: true,
+        ws: true,
+        rewrite: (path) => path.replace(/^\/agent/, ''),
       },
     },
   },

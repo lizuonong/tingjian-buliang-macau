@@ -215,14 +215,28 @@ export default function HearingAssistant() {
     const wavBlob = encodeWav(pcm, sampleRate);
     try {
       const { text } = await transcribeAudio(wavBlob);
+      const content = (text || '').trim();
+      // 后端对「无有效语音」也会以 success + 提示文案返回，这里识别后给出更友好的提示
+      if (!content || /空文本|静音|过短|没有可识别|未检测到|转写失败/.test(content)) {
+        setMessages((prev) => [
+          ...prev,
+          { id: nextId(), role: 'assistant', kind: 'text', text: '没听清对方的话，请让对方靠近麦克风、说得清楚一点，再试一次。' },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { id: nextId(), role: 'assistant', kind: 'text', text: `听到对方说：${content}` },
+        ]);
+      }
+    } catch (err) {
+      const msg = (err as { message?: string })?.message || '';
+      const friendly =
+        msg.includes('Failed to fetch') || msg.includes('fetch')
+          ? '语音转写服务暂时不可用，请稍后重试。'
+          : `语音识别失败：${msg}`;
       setMessages((prev) => [
         ...prev,
-        { id: nextId(), role: 'assistant', kind: 'text', text: `听到对方说：${text}` },
-      ]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        { id: nextId(), role: 'assistant', kind: 'text', text: '未能识别语音，请确认语音转文字服务已启动。' },
+        { id: nextId(), role: 'assistant', kind: 'text', text: friendly },
       ]);
     }
     setVoiceOpen(false);

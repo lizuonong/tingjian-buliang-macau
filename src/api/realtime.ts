@@ -52,7 +52,7 @@ export interface RealtimeHandlers {
 }
 
 const REALTIME_WS =
-  import.meta.env.VITE_REALTIME_WS || 'ws://118.31.170.211:8000/ws/video';
+  import.meta.env.VITE_REALTIME_WS || '/agent/ws/video';
 
 /** 构造 WebSocket 地址，task 会 URL 编码后作为 query 参数传递 */
 export function realtimeUrl(task: string): string {
