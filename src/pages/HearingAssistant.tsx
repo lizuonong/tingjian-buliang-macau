@@ -49,6 +49,7 @@ export default function HearingAssistant() {
   const [listening, setListening] = useState(false); // 是否正在模拟听取对方说话
   const [uploading, setUploading] = useState(false); // 是否正在上传/识别菜单
   const [voiceError, setVoiceError] = useState<string | null>(null); // 听取语音错误提示
+  const [voiceBusy, setVoiceBusy] = useState(false); // 正在请求麦克风权限
   const [confirmClear, setConfirmClear] = useState(false); // 是否确认清空消息
   const listRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -245,9 +246,11 @@ export default function HearingAssistant() {
   /** 开始听取：录制对方语音（PCM），停止时编码为 WAV 上传转写 */
   const startListening = async () => {
     if (!('mediaDevices' in navigator) || !navigator.mediaDevices?.getUserMedia) {
-      setVoiceError('当前环境无法访问麦克风。手机浏览器需通过 HTTPS 打开，并允许麦克风权限。');
+      setVoiceError('当前环境无法访问麦克风。请确认：① 已信任 HTTPS 证书；② 在地址栏允许麦克风权限。');
       return;
     }
+    setVoiceBusy(true);
+    setVoiceError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       micStreamRef.current = stream;
@@ -274,8 +277,19 @@ export default function HearingAssistant() {
       mute.connect(ctx.destination);
 
       setListening(true);
-    } catch {
-      setVoiceError('无法访问麦克风，请检查浏览器权限设置（手机请用 HTTPS 访问并允许权限）。');
+    } catch (err) {
+      const name = (err as { name?: string })?.name || '';
+      if (name === 'NotAllowedError' || name === 'SecurityError') {
+        setVoiceError('麦克风权限被拒绝。请在浏览器地址栏/设置中允许麦克风，然后重试。');
+      } else if (name === 'NotFoundError') {
+        setVoiceError('未找到可用的麦克风设备，请检查设备或连接。');
+      } else if (name === 'NotReadableError') {
+        setVoiceError('麦克风可能被其他应用占用，请关闭占用程序后重试。');
+      } else {
+        setVoiceError('无法访问麦克风，请检查浏览器权限（手机需信任 HTTPS 证书并允许麦克风）。');
+      }
+    } finally {
+      setVoiceBusy(false);
     }
   };
 
@@ -487,10 +501,20 @@ export default function HearingAssistant() {
               <button
                 type="button"
                 onClick={startListening}
-                className="focus-ring inline-flex min-h-[64px] items-center gap-2 rounded-2xl bg-white px-8 text-xl font-bold text-gray-900 transition-colors hover:bg-gray-100"
+                disabled={voiceBusy}
+                className="focus-ring inline-flex min-h-[64px] items-center gap-2 rounded-2xl bg-white px-8 text-xl font-bold text-gray-900 transition-colors hover:bg-gray-100 disabled:cursor-wait disabled:opacity-70"
               >
-                <Mic aria-hidden="true" className="h-6 w-6" />
-                开始听取
+                {voiceBusy ? (
+                  <>
+                    <span aria-hidden="true" className="h-6 w-6 animate-spin rounded-full border-2 border-gray-900 border-t-transparent" />
+                    正在请求麦克风…
+                  </>
+                ) : (
+                  <>
+                    <Mic aria-hidden="true" className="h-6 w-6" />
+                    开始听取
+                  </>
+                )}
               </button>
             )}
 
