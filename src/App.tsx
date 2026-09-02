@@ -1,4 +1,4 @@
-import { Accessibility, Eye, MessageSquareText, Siren } from 'lucide-react';
+import { Accessibility, Eye, Info, MessageSquareText, Siren } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import A11yModeToggle from './components/A11yModeToggle';
 import CasinoReminder from './components/CasinoReminder';
@@ -75,6 +75,17 @@ export default function App() {
 
       {/* 主内容 */}
       <main id="main" className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
+        {/* Demo 提示 */}
+        <div
+          role="note"
+          className="demo-notice mb-4 flex items-start gap-3 rounded-xl border-2 border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+        >
+          <Info aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <p className="leading-relaxed">
+            本网站仅作为 <strong>demo 演示</strong>；受自签名证书限制，请在<strong>谷歌 Chrome 私密模式</strong>下打开，以获得最佳使用体验（摄像头 / 麦克风 / 定位可正常授权）。
+          </p>
+        </div>
+
         {/* 賭場熔斷 → 溫馨提醒：距任一娛樂場中心约 50 米時觸發 */}
         <CasinoReminder />
         {renderPage()}

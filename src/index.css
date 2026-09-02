@@ -93,4 +93,12 @@ body {
   html.a11y-high-contrast .casino-reminder button {
     @apply bg-white text-black hover:bg-gray-200;
   }
+
+  /* Demo 提示横幅 */
+  .demo-notice {
+    @apply border-2 border-amber-300 bg-amber-50 text-amber-900;
+  }
+  html.a11y-high-contrast .demo-notice {
+    @apply bg-black border-2 border-white text-white;
+  }
 }
