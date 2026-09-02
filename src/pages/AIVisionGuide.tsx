@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import IconButton from '../components/IconButton';
 import PageHeader from '../components/PageHeader';
 import { RealtimeSession } from '../api/realtime';
-import type { RealtimeStatus } from '../api/realtime';
+import type { RealtimeEvent, RealtimeStatus } from '../api/realtime';
 
 /**
  * 05 AI 视觉导览 (AI Vision Guide) —— 语音通话式界面
@@ -36,6 +36,22 @@ function floatTo16PCM(float32: Float32Array): Int16Array {
   return out;
 }
 
+/** 线性插值重采样到 16kHz（iOS Safari 会忽略 AudioContext({sampleRate:16000})） */
+function resampleTo16k(input: Float32Array, fromRate: number, toRate = 16000): Float32Array {
+  if (fromRate === toRate) return input;
+  const ratio = fromRate / toRate;
+  const outLen = Math.floor(input.length / ratio);
+  const out = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const pos = i * ratio;
+    const i0 = Math.floor(pos);
+    const i1 = Math.min(i0 + 1, input.length - 1);
+    const frac = pos - i0;
+    out[i] = input[i0] * (1 - frac) + input[i1] * frac;
+  }
+  return out;
+}
+
 export default function AIVisionGuide() {
   const [sessionActive, setSessionActive] = useState(false); // 会话是否进行中
   const [micOn, setMicOn] = useState(true); // 麦克风开关
@@ -43,6 +59,8 @@ export default function AIVisionGuide() {
   const [status, setStatus] = useState<RealtimeStatus | 'IDLE' | 'CONNECTING'>('IDLE');
   const [streamText, setStreamText] = useState(''); // 流式输出的 AI 文字
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [landmark, setLandmark] = useState<string | null>(null); // 最近识别到的景点
+  const [textInput, setTextInput] = useState(''); // 文字提问输入
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const sessionRef = useRef<RealtimeSession | null>(null);
@@ -132,6 +150,7 @@ export default function AIVisionGuide() {
   /** 服务端状态回调 */
   const handleStatus = useCallback((s: RealtimeStatus) => {
     setStatus(s);
+    if (s.startsWith('OMNI_ERROR')) setErrorMsg('实时服务异常，请重新开始导览。');
     if (s === 'READY') setStreamText('');
     if (s === 'ASSISTANT_REPLY') {
       setSpeaking(true);
@@ -156,6 +175,24 @@ export default function AIVisionGuide() {
     setStreamText((prev) => prev + text);
   }, []);
 
+  /** 0x13 结构化事件：景点识别等 */
+  const handleEvent = useCallback((ev: RealtimeEvent) => {
+    if (ev.type === 'landmark') {
+      if (ev.hit && ev.name) {
+        setLandmark(
+          `已识别：${ev.name}${ev.score != null ? ` · 置信度 ${Math.round(ev.score * 100)}%` : ''}${ev.generating ? ' · 介绍生成中…' : ev.generated ? ' · 介绍已生成' : ''}`,
+        );
+      } else {
+        setLandmark('未识别到知名景点');
+      }
+    }
+  }, []);
+
+  /** 0x14 播报文本（预留） */
+  const handleBroadcast = useCallback((text: string) => {
+    setStreamText((prev) => (prev ? `${prev}\n[提示] ${text}` : `[提示] ${text}`));
+  }, []);
+
   const handleAudio = useCallback(
     (pcm: Int16Array) => playPcm(pcm),
     [playPcm],
@@ -164,19 +201,25 @@ export default function AIVisionGuide() {
   /** 开始会话：请求摄像头+麦克风，建立 WebSocket，持续推流 */
   const startSession = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia) {
-      setErrorMsg('当前浏览器不支持摄像头/麦克风。请使用 Chrome / Edge（需 HTTPS 或 localhost）。');
+      setErrorMsg('当前浏览器不支持摄像头/麦克风。请使用 Chrome / Edge；手机浏览器需通过 HTTPS 访问，并在地址栏允许摄像头/麦克风权限。');
       return;
     }
     setErrorMsg(null);
+    setLandmark(null);
     setSessionActive(true);
     setStatus('CONNECTING');
 
     try {
-      // 摄像头：环境后置摄像头，640x480
-      const camStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false,
-      });
+      // 摄像头：优先环境后置摄像头（640x480），个别设备不支持后置约束时回退到默认摄像头
+      let camStream: MediaStream;
+      try {
+        camStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false,
+        });
+      } catch {
+        camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
       camStreamRef.current = camStream;
       if (videoRef.current) {
         videoRef.current.srcObject = camStream;
@@ -188,6 +231,8 @@ export default function AIVisionGuide() {
         onStatus: handleStatus,
         onText: handleText,
         onAudio: handleAudio,
+        onEvent: handleEvent,
+        onBroadcast: handleBroadcast,
         onClose: () => {
           setSessionActive(false);
           setSpeaking(false);
@@ -212,27 +257,30 @@ export default function AIVisionGuide() {
         }, 'image/jpeg', 0.6);
       }, 1000);
 
-      // 麦克风采集：AudioContext 必须 16kHz，ScriptProcessor 必须 connect 才触发
+      // 麦克风采集：iOS Safari 会忽略 AudioContext({sampleRate:16000})，需按实际采样率重采样到 16kHz
       const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       micStreamRef.current = micStream;
       const micCtx = new AudioContext({ sampleRate: 16000 });
       micCtxRef.current = micCtx;
+      void micCtx.resume();
       const src = micCtx.createMediaStreamSource(micStream);
-      const gain = micCtx.createGain();
-      gain.gain.value = 0; // 隔离回音
+      const mute = micCtx.createGain();
+      mute.gain.value = 0; // 隔离回音（放在采集节点之后，避免把麦克风信号也静音）
       const processor = micCtx.createScriptProcessor(4096, 1, 1);
       processor.onaudioprocess = (e) => {
         if (!micOnRef.current) return;
         const input = e.inputBuffer.getChannelData(0);
-        sessionRef.current?.sendAudio(floatTo16PCM(input));
+        const resampled = resampleTo16k(input, micCtx.sampleRate);
+        sessionRef.current?.sendAudio(floatTo16PCM(resampled));
       };
-      src.connect(gain);
-      gain.connect(processor);
-      processor.connect(micCtx.destination);
-      micGainRef.current = gain;
+      // 连接顺序：src → processor（采集真实音频）→ mute(0) → destination（隔离回音且保证调度）
+      src.connect(processor);
+      processor.connect(mute);
+      mute.connect(micCtx.destination);
+      micGainRef.current = mute;
       micProcessorRef.current = processor;
     } catch (err) {
-      setErrorMsg('无法访问摄像头或麦克风，请检查浏览器权限设置。');
+      setErrorMsg('无法访问摄像头或麦克风。请检查浏览器是否允许权限（手机需 HTTPS 访问），并确认摄像头未被其他应用占用。');
       setSessionActive(false);
       teardown();
     }
@@ -253,6 +301,15 @@ export default function AIVisionGuide() {
     endCall();
     void startSession();
   }, [endCall, startSession]);
+
+  /** 文字提问（0x04）：可触发后台画像/景点识别流程 */
+  const sendTextMessage = useCallback(() => {
+    const t = textInput.trim();
+    if (!t || !sessionRef.current) return;
+    sessionRef.current.sendText(t);
+    setStreamText((prev) => (prev ? `${prev}\n我：${t}` : `我：${t}`));
+    setTextInput('');
+  }, [textInput]);
 
   /** 组件卸载时清理 */
   useEffect(() => {
@@ -322,18 +379,19 @@ export default function AIVisionGuide() {
           </svg>
         )}
 
-        {/* AI 识别框 */}
-        {VISION_FOCUS.map((f) => (
-          <div
-            key={f.label}
-            className="absolute rounded-lg border-2 border-yellow-300 bg-yellow-300/15"
-            style={{ top: f.top, left: f.left, width: f.width, height: f.height }}
-          >
-            <span className="absolute -top-7 left-0 rounded bg-yellow-300 px-2 py-0.5 text-xs font-bold text-gray-900">
-              {f.label}
-            </span>
-          </div>
-        ))}
+        {/* AI 识别框：仅在摄像头未开启时作为占位示意，开启后不遮挡实时画面 */}
+        {!sessionActive &&
+          VISION_FOCUS.map((f) => (
+            <div
+              key={f.label}
+              className="absolute rounded-lg border-2 border-yellow-300 bg-yellow-300/15"
+              style={{ top: f.top, left: f.left, width: f.width, height: f.height }}
+            >
+              <span className="absolute -top-7 left-0 rounded bg-yellow-300 px-2 py-0.5 text-xs font-bold text-gray-900">
+                {f.label}
+              </span>
+            </div>
+          ))}
 
         {/* 识别状态角标 */}
         <span className="absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-sm font-medium text-white">
@@ -355,31 +413,39 @@ export default function AIVisionGuide() {
               speaking ? 'scale-110' : 'scale-100'
             }`}
           />
-          <span aria-hidden="true" className="relative text-white">
-            <Volume2 className="h-14 w-14" />
-          </span>
-
-          {/* 说话波形：speaking 时波动 */}
-          <span aria-hidden="true" className="absolute flex items-center gap-1">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <span
-                key={i}
-                className={`block w-1.5 rounded-full bg-white transition-all duration-200 ${
-                  speaking ? 'animate-pulse' : 'h-2'
-                }`}
-                style={{
-                  height: speaking ? 16 + (i % 3) * 8 : 8,
-                  animationDelay: `${i * 80}ms`,
-                }}
-              />
-            ))}
-          </span>
+          {/* 语音球：静音显示喇叭图标，说话时显示波形，避免图标重叠 */}
+          {speaking ? (
+            <span aria-hidden="true" className="relative flex items-center gap-1.5">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <span
+                  key={i}
+                  className="block w-1.5 rounded-full bg-white animate-pulse"
+                  style={{ height: 16 + (i % 3) * 8, animationDelay: `${i * 80}ms` }}
+                />
+              ))}
+            </span>
+          ) : (
+            <span aria-hidden="true" className="relative text-white">
+              <Volume2 className="h-14 w-14" />
+            </span>
+          )}
         </div>
 
         {/* 会话状态 */}
         <p className="text-base font-semibold text-gray-800" aria-live="polite">
           {statusText}
         </p>
+
+        {/* 景点识别结果（0x13） */}
+        {landmark && (
+          <p
+            aria-live="polite"
+            className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-sm font-medium text-brand-700"
+          >
+            <ScanLine aria-hidden="true" className="h-4 w-4" />
+            {landmark}
+          </p>
+        )}
 
         {/* 流式文字气泡（实时渲染模型输出） */}
         <div
@@ -388,6 +454,32 @@ export default function AIVisionGuide() {
         >
           {streamText || '通话建立后，AI 识别和回复内容将实时显示在这里。'}
         </div>
+
+        {/* 文字提问（0x04：可触发后台画像/景点识别） */}
+        <form
+          className="flex w-full items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            sendTextMessage();
+          }}
+        >
+          <input
+            type="text"
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            disabled={!sessionActive}
+            placeholder={sessionActive ? '也可用文字提问…' : '通话建立后可文字提问'}
+            aria-label="文字提问输入"
+            className="focus-ring min-h-[44px] flex-1 rounded-xl border-2 border-gray-300 bg-white px-4 text-base text-gray-900 placeholder:text-gray-400 disabled:bg-gray-100"
+          />
+          <button
+            type="submit"
+            disabled={!sessionActive || !textInput.trim()}
+            className="focus-ring min-h-[44px] shrink-0 rounded-xl bg-brand-600 px-5 text-sm font-bold text-white transition-colors hover:bg-brand-700 disabled:opacity-40"
+          >
+            发送
+          </button>
+        </form>
 
         {/* 通话控制条 */}
         <div className="flex w-full items-center justify-center gap-5">

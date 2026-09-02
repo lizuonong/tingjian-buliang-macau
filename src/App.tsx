@@ -1,6 +1,7 @@
 import { Accessibility, Eye, MessageSquareText, Siren } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import A11yModeToggle from './components/A11yModeToggle';
+import CasinoReminder from './components/CasinoReminder';
 import { useA11y } from './context/A11yContext';
 import type { PageId } from './types';
 import SpotDetail from './pages/SpotDetail';
@@ -74,6 +75,8 @@ export default function App() {
 
       {/* 主内容 */}
       <main id="main" className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
+        {/* 賭場熔斷 → 溫馨提醒：距任一娛樂場中心约 50 米時觸發 */}
+        <CasinoReminder />
         {renderPage()}
       </main>
 

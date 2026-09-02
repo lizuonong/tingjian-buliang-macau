@@ -82,4 +82,15 @@ body {
   html.a11y-high-contrast .card-surface {
     @apply bg-black border-2 border-white shadow-none;
   }
+
+  /* 賭場熔斷 → 溫馨提醒（暖色警示，非强制阻断） */
+  .casino-reminder {
+    @apply bg-amber-50 border-2 border-amber-400 text-amber-900;
+  }
+  html.a11y-high-contrast .casino-reminder {
+    @apply bg-black border-2 border-white text-white;
+  }
+  html.a11y-high-contrast .casino-reminder button {
+    @apply bg-white text-black hover:bg-gray-200;
+  }
 }

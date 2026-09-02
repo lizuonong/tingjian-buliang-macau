@@ -25,8 +25,8 @@ export function getUserLocation(): Promise<{ lat: number; lng: number } | null> 
 }
 
 export async function fetchSpots(): Promise<Spot[]> {
+  const loc = await getUserLocation();
   try {
-    const loc = await getUserLocation();
     // 有定位则让后端按用户位置计算各景点真实距离
     const query = loc ? `?lat=${loc.lat}&lng=${loc.lng}` : '';
     const resp = await fetch(`${SPOTS_API}${query}`, { method: 'GET' });
@@ -37,8 +37,14 @@ export async function fetchSpots(): Promise<Spot[]> {
     }
     throw new Error(data.error || '空数据');
   } catch {
-    // 后端不可达 → 降级到本地数据
+    // 后端不可达 → 降级到本地数据；若已拿到用户定位，则用本地权威坐标现算距离
     const { SPOTS } = await import('../data/spots');
-    return SPOTS;
+    if (!loc) return SPOTS;
+    const { haversineMeters } = await import('../utils/geo');
+    return SPOTS.map((s) => {
+      if (s.lat == null || s.lng == null) return s;
+      const km = haversineMeters({ lat: s.lat, lng: s.lng }, loc) / 1000;
+      return { ...s, distanceKm: Math.round(km * 10) / 10 };
+    });
   }
 }

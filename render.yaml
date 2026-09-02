@@ -1,0 +1,22 @@
+# Render 部署蓝图（免费 Web Service，自动 HTTPS）
+#
+# 用法：把仓库推到 GitHub 后，在 Render 控制台 New → Blueprint，选择本仓库，
+# Render 会按此配置自动创建服务，并给你 https://tingjian-macau.onrender.com
+#
+# 注意：本服务是「单体服务」（FastAPI 同时托管前端 dist/ + /api/spots），
+#       绑定到 Render 分配的 $PORT，自动 HTTPS。
+services:
+  - type: web
+    name: tingjian-macau
+    runtime: python
+    plan: free
+    # 构建：先装前端依赖并打包出 dist/，再装后端依赖
+    buildCommand: |
+      npm install
+      npm run build
+      pip install -r server/requirements.txt
+    startCommand: uvicorn server.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.10.12"
+    autoDeploy: true

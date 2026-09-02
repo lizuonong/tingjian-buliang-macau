@@ -21,6 +21,8 @@ from typing import Any
 import requests
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="听见·步量澳门 · 景点数据后端", version="1.0.0")
 
@@ -38,7 +40,10 @@ SOURCE_URL = "https://www.macaotourism.gov.mo/api/accessibility/zh-hans/sights.j
 _lang = "zh-hans"
 _CACHE_FILE = os.path.join(os.path.dirname(__file__), "cache", "spots.json")
 _CACHE_TTL = 6 * 60 * 60  # 6 小时
-
+# 官网个别景点坐标有误（纬度被写成了经度值等），此处以权威坐标覆盖：name -> (lat, lng)
+_COORD_FIX: dict[str, tuple[float, float]] = {
+    "烧灰炉公园": (22.18677, 113.53719),
+}
 _cache: dict[str, Any] = {"data": None, "ts": 0}
 
 
@@ -123,6 +128,11 @@ def _to_spot(raw: dict, order: int = 0) -> dict:
     coord = raw.get("coordinate") or []
     lng = float(coord[0]) if len(coord) > 0 and coord[0] not in (None, "") else None
     lat = float(coord[1]) if len(coord) > 1 and coord[1] not in (None, "") else None
+
+    # 官网个别坐标有误，以权威坐标覆盖
+    fix = _COORD_FIX.get(name)
+    if fix:
+        lat, lng = fix
 
     return {
         "id": str(raw.get("id", name)),
@@ -210,3 +220,25 @@ def manual_sync() -> dict:
         return {"status": "success", "count": len(data)}
     except Exception as exc:  # noqa: BLE001
         return {"status": "error", "error": str(exc)}
+
+
+# ============================================================
+# 托管前端构建产物（单服务部署）：把 Vite 构建的 dist/ 一并提供
+# 这样前端与 /api/spots 同源，无需跨域，适合单机/单域名上线。
+# 前端需先执行 `npm run build`（产物在 dist/）再启动本服务。
+# ============================================================
+_DIST_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dist"))
+
+
+@app.get("/")
+def spa_index() -> FileResponse:
+    """返回前端入口页。"""
+    return FileResponse(os.path.join(_DIST_DIR, "index.html"))
+
+
+if os.path.isdir(os.path.join(_DIST_DIR, "assets")):
+    app.mount(
+        "/assets",
+        StaticFiles(directory=os.path.join(_DIST_DIR, "assets")),
+        name="assets",
+    )

@@ -23,12 +23,29 @@ export type RealtimeStatus =
   | 'READY'
   | 'ASSISTANT_REPLY'
   | 'REPLY_DONE'
-  | 'INTERRUPT';
+  | 'INTERRUPT'
+  | 'OMNI_ERROR';
+
+/** 服务端结构化事件（0x13），如景点识别结果 */
+export interface RealtimeEvent {
+  type: string;
+  hit?: boolean;
+  name?: string;
+  id?: string;
+  score?: number;
+  gray?: boolean;
+  generating?: boolean;
+  generated?: boolean;
+  intro?: string;
+  [key: string]: unknown;
+}
 
 export interface RealtimeHandlers {
   onStatus?: (status: RealtimeStatus) => void;
   onText?: (text: string) => void;
   onAudio?: (pcm: Int16Array) => void;
+  onEvent?: (event: RealtimeEvent) => void;
+  onBroadcast?: (text: string) => void;
   onOpen?: () => void;
   onClose?: () => void;
   onError?: (err: unknown) => void;
@@ -87,6 +104,11 @@ export class RealtimeSession {
     this.send(0x03, new Uint8Array(0));
   }
 
+  /** 发送文本（0x04）：可触发后台流程（画像/景点识别等） */
+  sendText(text: string) {
+    this.send(0x04, new TextEncoder().encode(text));
+  }
+
   /** 关闭连接 */
   close() {
     this.ws?.close();
@@ -115,9 +137,13 @@ export class RealtimeSession {
 
     switch (type) {
       case 0x10: {
-        // PCM 24kHz 16bit mono -> Int16Array
-        const pcm = new Int16Array(data, 5, len >> 1);
-        this.handlers.onAudio?.(pcm);
+        // PCM 24kHz 16bit mono
+        // payload 从偏移 5 开始（奇数），无法直接 new Int16Array（需 2 字节对齐）→ 先复制到对齐缓冲
+        const frames = len >> 1;
+        if (frames <= 0) break;
+        const aligned = new ArrayBuffer(frames * 2);
+        new Uint8Array(aligned).set(new Uint8Array(data, 5, frames * 2));
+        this.handlers.onAudio?.(new Int16Array(aligned));
         break;
       }
       case 0x11: {
@@ -128,6 +154,22 @@ export class RealtimeSession {
       case 0x12: {
         const status = new TextDecoder('utf-8').decode(payload) as RealtimeStatus;
         this.handlers.onStatus?.(status);
+        break;
+      }
+      case 0x13: {
+        // 结构化事件（景点识别结果等）
+        const json = new TextDecoder('utf-8').decode(payload);
+        try {
+          this.handlers.onEvent?.(JSON.parse(json) as RealtimeEvent);
+        } catch {
+          /* 非 JSON，忽略 */
+        }
+        break;
+      }
+      case 0x14: {
+        // 播报文本（预留）
+        const text = new TextDecoder('utf-8').decode(payload);
+        if (text.trim()) this.handlers.onBroadcast?.(text.trim());
         break;
       }
     }

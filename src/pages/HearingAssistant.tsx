@@ -1,5 +1,7 @@
-import { Maximize2, MessageSquareText, Mic, Send, Trash2, Utensils } from 'lucide-react';
+import { Maximize2, MessageSquareText, Mic, MicOff, Send, Trash2, Utensils } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { transcribeAudio } from '../api/asr';
+import { encodeWav } from '../utils/wav';
 import { recognizeMenu } from '../api/vision';
 import type { MenuItem } from '../api/vision';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -46,12 +48,19 @@ export default function HearingAssistant() {
   const [voiceOpen, setVoiceOpen] = useState(false); // 听取语音大字模态
   const [listening, setListening] = useState(false); // 是否正在模拟听取对方说话
   const [uploading, setUploading] = useState(false); // 是否正在上传/识别菜单
+  const [voiceError, setVoiceError] = useState<string | null>(null); // 听取语音错误提示
   const [confirmClear, setConfirmClear] = useState(false); // 是否确认清空消息
   const listRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const voiceCloseBtnRef = useRef<HTMLButtonElement>(null);
   const voiceTimer = useRef<number | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Float32Array[]>([]); // 采集到的 PCM 分片
+  const sampleRateRef = useRef(0);
+  const recordingRef = useRef(false);
   const idRef = useRef(0);
   const nextId = () => {
     idRef.current += 1;
@@ -112,11 +121,6 @@ export default function HearingAssistant() {
     }, 400);
   };
 
-  /** 删除单条消息 */
-  const deleteMessage = (id: string) => {
-    setMessages((prev) => prev.filter((m) => m.id !== id));
-  };
-
   /** 清空全部消息（重置回欢迎语） */
   const confirmClearAll = () => {
     setMessages([{ id: 'welcome', role: 'assistant', kind: 'text', text: WELCOME_TEXT }]);
@@ -171,31 +175,108 @@ export default function HearingAssistant() {
     }
   };
 
+  /** 停止录音：合并 PCM → 编码 WAV → 上传 /api/audio/asr 转写 */
+  const stopRecording = async () => {
+    if (!recordingRef.current) {
+      setVoiceOpen(false);
+      return;
+    }
+    recordingRef.current = false;
+    processorRef.current?.disconnect();
+    micStreamRef.current?.getTracks().forEach((t) => t.stop());
+    micStreamRef.current = null;
+    processorRef.current = null;
+    const ctx = audioCtxRef.current;
+    audioCtxRef.current = null;
+    const sampleRate = sampleRateRef.current || 44100;
+    if (ctx) void ctx.close().catch(() => {});
+    setListening(false);
+
+    // 合并 PCM 分片
+    const chunks = chunksRef.current;
+    chunksRef.current = [];
+    let total = 0;
+    for (const c of chunks) total += c.length;
+    if (total === 0) {
+      setMessages((prev) => [
+        ...prev,
+        { id: nextId(), role: 'assistant', kind: 'text', text: '未录到有效音频，请重试。' },
+      ]);
+      setVoiceOpen(false);
+      return;
+    }
+    const pcm = new Float32Array(total);
+    let off = 0;
+    for (const c of chunks) {
+      pcm.set(c, off);
+      off += c.length;
+    }
+    const wavBlob = encodeWav(pcm, sampleRate);
+    try {
+      const { text } = await transcribeAudio(wavBlob);
+      setMessages((prev) => [
+        ...prev,
+        { id: nextId(), role: 'assistant', kind: 'text', text: `听到对方说：${text}` },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { id: nextId(), role: 'assistant', kind: 'text', text: '未能识别语音，请确认语音转文字服务已启动。' },
+      ]);
+    }
+    setVoiceOpen(false);
+  };
+
   /** 打开「听取语音」大字展示（请对方对着手机说话） */
   const openVoice = () => {
     setVoiceOpen(true);
     setListening(false);
+    setVoiceError(null);
   };
 
   /** 关闭「听取语音」模态 */
   const closeVoice = () => {
     if (voiceTimer.current) clearTimeout(voiceTimer.current);
+    stopRecording();
     setVoiceOpen(false);
     setListening(false);
   };
 
-  /** 开始听取：模拟对方语音转文字，结束后把文字加入聊天记录 */
-  const startListening = () => {
-    setListening(true);
-    voiceTimer.current = window.setTimeout(() => {
-      const transcript = '您好，我想请问无障碍通道怎么走？';
-      setMessages((prev) => [
-        ...prev,
-        { id: nextId(), role: 'assistant', kind: 'text', text: `听到对方说：${transcript}` },
-      ]);
-      setVoiceOpen(false);
-      setListening(false);
-    }, 3000);
+  /** 开始听取：录制对方语音（PCM），停止时编码为 WAV 上传转写 */
+  const startListening = async () => {
+    if (!('mediaDevices' in navigator) || !navigator.mediaDevices?.getUserMedia) {
+      setVoiceError('当前环境无法访问麦克风。手机浏览器需通过 HTTPS 打开，并允许麦克风权限。');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
+      const ctx = new AudioContext();
+      audioCtxRef.current = ctx;
+      void ctx.resume();
+      sampleRateRef.current = ctx.sampleRate;
+
+      const src = ctx.createMediaStreamSource(stream);
+      const processor = ctx.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
+      chunksRef.current = [];
+      recordingRef.current = true;
+      processor.onaudioprocess = (e) => {
+        if (!recordingRef.current) return;
+        chunksRef.current.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      };
+
+      // 连接顺序：src → processor（采集真实音频）→ gain(0) → destination（隔离回音、保证调度）
+      const mute = ctx.createGain();
+      mute.gain.value = 0;
+      src.connect(processor);
+      processor.connect(mute);
+      mute.connect(ctx.destination);
+
+      setListening(true);
+    } catch {
+      setVoiceError('无法访问麦克风，请检查浏览器权限设置（手机请用 HTTPS 访问并允许权限）。');
+    }
   };
 
   return (
@@ -375,14 +456,33 @@ export default function HearingAssistant() {
               我会看到您的语音文字。谢谢！
             </p>
 
-            {listening ? (
+            {voiceError && (
               <p
-                className="flex items-center gap-2 text-a11y-xl font-semibold text-brand-300"
-                aria-live="polite"
+                role="alert"
+                className="max-w-md rounded-xl bg-amber-500/20 px-4 py-3 text-a11y-xl leading-relaxed text-amber-300"
               >
-                <Mic aria-hidden="true" className="h-8 w-8 animate-pulse" />
-                请说话…（正在听取）
+                {voiceError}
               </p>
+            )}
+
+            {listening ? (
+              <div className="flex flex-col items-center gap-4">
+                <p
+                  className="flex items-center gap-2 text-a11y-xl font-semibold text-brand-300"
+                  aria-live="polite"
+                >
+                  <Mic aria-hidden="true" className="h-8 w-8 animate-pulse" />
+                  正在听取…（请对方说话）
+                </p>
+                <button
+                  type="button"
+                  onClick={stopRecording}
+                  className="focus-ring inline-flex min-h-[64px] items-center gap-2 rounded-2xl bg-white px-8 text-xl font-bold text-gray-900 transition-colors hover:bg-gray-100"
+                >
+                  <MicOff aria-hidden="true" className="h-6 w-6" />
+                  结束并识别
+                </button>
+              </div>
             ) : (
               <button
                 type="button"
@@ -400,6 +500,17 @@ export default function HearingAssistant() {
           </div>
         </div>
       )}
+
+      {/* 清空消息二次确认 */}
+      <ConfirmDialog
+        open={confirmClear}
+        title="清空聊天记录"
+        description="确定要清空全部聊天记录吗？此操作无法撤销。"
+        confirmText="确定清空"
+        cancelText="取消"
+        onConfirm={confirmClearAll}
+        onCancel={() => setConfirmClear(false)}
+      />
     </div>
   );
 }
